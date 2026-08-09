@@ -35,15 +35,27 @@ const CLIENTS = [
     id: "ask",
     name: "Just ask it",
     where: "Paste into the agent's chat — it will do the rest",
-    code: `Add an MCP server named "synapsse" at ${MCP_URL}, using streamable HTTP transport. Then list its tools so we can confirm it connected.`,
-    note: "Most agents can edit their own MCP config. The tabs beside this one are for when yours cannot, or when you would rather do it yourself",
+    /*
+     * Every instruction here exists because leaving it out produced the wrong
+     * setup in practice. Agents default to the narrowest MCP scope, so a memory
+     * meant for every project ends up registered in whichever folder the chat
+     * happened to start in. And left to itself no agent installs the recall
+     * hook, because nothing in the MCP handshake mentions it — which is how you
+     * end up with a store that is written to and never read.
+     */
+    code: `Set up SYNAPSSE, my local memory graph, and use it from now on.
+
+1. Add an MCP server named "synapsse" at ${MCP_URL} using streamable HTTP transport. Register it globally, for every project, not only this one — in Claude Code that is: claude mcp add --scope user --transport http synapsse ${MCP_URL}
+2. If you support hooks, make recall automatic: register hooks/synapsse_recall.py from the synapsse folder as a UserPromptSubmit hook. In Claude Code that is a command hook in ~/.claude/settings.json running: python3 /full/path/to/synapsse/hooks/synapsse_recall.py — ask me for the path if you cannot find the folder.
+3. List the server tools to confirm it connected, and tell me whether I need to restart for either change to take effect.`,
+    note: "Most agents can edit their own MCP config and settings. The tabs beside this one are for when yours cannot, or when you would rather do it yourself",
   },
   {
     id: "claude",
     name: "Claude Code",
     where: "One command, from anywhere",
-    code: `claude mcp add --transport http synapsse ${MCP_URL}`,
-    note: "Or commit the same server to a project in .mcp.json",
+    code: `claude mcp add --scope user --transport http synapsse ${MCP_URL}`,
+    note: "--scope user puts it in every project; drop it for this one only, or commit the server to a repo in .mcp.json",
   },
   {
     id: "cursor",
