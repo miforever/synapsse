@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { WS_URL } from "@/lib/api";
+import { wsUrl } from "@/lib/api";
 import {
   EVENT_NEW_NODE,
   EVENT_NODE_DELETED,
@@ -32,7 +32,7 @@ export function useGraphStream(handlers: GraphEventHandlers): boolean {
     let disposed = false;
 
     const connect = () => {
-      socket = new WebSocket(WS_URL);
+      socket = new WebSocket(wsUrl());
 
       socket.onopen = () => setConnected(true);
 

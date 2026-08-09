@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.router import router as api_router
+from app.core.auth import TokenAuthMiddleware, warn_if_exposed
 from app.core.config import settings
 from app.core.database import db
 from app.mcp.server import mcp
@@ -21,6 +22,7 @@ mcp_app = mcp.http_app(path="/")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    warn_if_exposed()
     await db.connect(settings.db_path)
 
     # Load the embedding model in the background.
@@ -54,6 +56,12 @@ def create_app() -> FastAPI:
     canvas over a real network.
     """
     app = FastAPI(title="SYNAPSSE", lifespan=lifespan)
+
+    # Added first, so it sits *inside* CORS: the last middleware added is the
+    # outermost, and a preflight OPTIONS carries no Authorization header. With
+    # the order reversed the browser's preflight would be rejected and the
+    # canvas could never make the real request at all.
+    app.add_middleware(TokenAuthMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,

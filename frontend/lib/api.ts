@@ -10,10 +10,53 @@ import type {
 export const API_URL =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
-export const WS_URL = API_URL.replace(/^http/, "ws") + "/ws/graph";
+const TOKEN_KEY = "synapsse.token";
+
+/**
+ * The daemon's token, when it has one.
+ *
+ * Kept in localStorage rather than an environment variable so it is not baked
+ * into the bundle, and so a canvas served from anywhere can be pointed at a
+ * daemon that is locked without a rebuild. Empty on a normal local run, where
+ * the daemon has no token at all.
+ */
+export function authToken(): string {
+  if (typeof window === "undefined") return "";
+  return window.localStorage.getItem(TOKEN_KEY) ?? "";
+}
+
+export function setAuthToken(token: string): void {
+  if (token) window.localStorage.setItem(TOKEN_KEY, token);
+  else window.localStorage.removeItem(TOKEN_KEY);
+}
+
+export function authHeaders(): HeadersInit {
+  const token = authToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+/** Raised when the daemon has a token and we did not present the right one. */
+export class Unauthorized extends Error {
+  constructor() {
+    super("This daemon needs a token");
+    this.name = "Unauthorized";
+  }
+}
+
+// The browser cannot set headers on a WebSocket, so the token rides in the
+// query string — the one place the daemon also accepts it.
+export function wsUrl(): string {
+  const base = API_URL.replace(/^http/, "ws") + "/ws/graph";
+  const token = authToken();
+  return token ? `${base}?token=${encodeURIComponent(token)}` : base;
+}
 
 async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
-  const response = await fetch(`${API_URL}${path}`, { signal });
+  const response = await fetch(`${API_URL}${path}`, {
+    signal,
+    headers: authHeaders(),
+  });
+  if (response.status === 401) throw new Unauthorized();
   if (!response.ok) {
     throw new Error(`${path} failed: ${response.status}`);
   }
@@ -62,14 +105,17 @@ export function saveLayout(
 ): Promise<Response> {
   return fetch(`${API_URL}/layout/${mode}`, {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify({ positions }),
     keepalive: true,
   });
 }
 
 export function clearLayout(mode: string): Promise<Response> {
-  return fetch(`${API_URL}/layout/${mode}`, { method: "DELETE" });
+  return fetch(`${API_URL}/layout/${mode}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
 }
 
 /** Absolute address of an attachment, for an <img> or a link. */

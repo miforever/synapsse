@@ -81,6 +81,13 @@ class Settings(BaseSettings):
     host: str = "127.0.0.1"
     port: int = 8000
 
+    # Shared secret for every request that is not /health. Unset by default,
+    # because on 127.0.0.1 the loopback interface is already the access
+    # control and a mandatory token would be ceremony for a single user on
+    # their own machine. Set it — and you must, before binding anywhere else —
+    # and the daemon refuses anything that cannot present it.
+    auth_token: str | None = None
+
     # Where attached files are kept. Beside the database on purpose: the two
     # are one store, and backing up either alone leaves memories pointing at
     # files that are not there.

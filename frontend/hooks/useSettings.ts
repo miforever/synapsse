@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { API_URL } from "@/lib/api";
+import { API_URL, authHeaders } from "@/lib/api";
 import type { AppSettings, MediaSettings } from "@/lib/types";
 
 const FALLBACK: AppSettings = {
@@ -17,7 +17,10 @@ export function useSettings() {
   useEffect(() => {
     const controller = new AbortController();
 
-    fetch(`${API_URL}/settings`, { signal: controller.signal })
+    fetch(`${API_URL}/settings`, {
+      signal: controller.signal,
+      headers: authHeaders(),
+    })
       .then((response) => response.json() as Promise<AppSettings>)
       .then(setSettings)
       .catch(() => {
@@ -35,7 +38,7 @@ export function useSettings() {
       try {
         const response = await fetch(`${API_URL}/settings`, {
           method: "PATCH",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...authHeaders() },
           body: JSON.stringify({ media: next }),
         });
         setSettings((await response.json()) as AppSettings);
