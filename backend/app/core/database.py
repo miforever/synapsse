@@ -70,8 +70,6 @@ async def init_db(db_path: str | None = None) -> aiosqlite.Connection:
         await conn.executescript(VECTOR_TABLE.format(dim=settings.embedding_dim))
         vectors.mark_available(conn)
     await conn.executemany(SEED_TYPES_SQL, [(name,) for name in DEFAULT_NODE_TYPES])
-    # Boot is the natural moment: it is the one point where nothing is mid-read,
-    # and a daemon that runs for weeks would otherwise never get round to it.
     await conn.execute(PRUNE_TOMBSTONES)
     await conn.commit()
     return conn

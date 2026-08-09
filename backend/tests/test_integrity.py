@@ -1,7 +1,7 @@
 """Writes that must not half-happen, and indexes that must not go stale.
 
-Each of these covers a failure that leaves the store in a state the caller was
-not told about — the kind an agent responds to by writing the memory again.
+Each covers a failure that leaves the store in a state the caller was not told
+about — the kind an agent answers by writing the memory a second time.
 """
 
 import aiosqlite
@@ -38,11 +38,7 @@ async def live_db(conn: aiosqlite.Connection, monkeypatch: pytest.MonkeyPatch):
 async def test_add_memory_writes_nothing_when_a_link_target_is_unknown(
     live_db: aiosqlite.Connection,
 ) -> None:
-    """The bug: the node was committed, then the edge's foreign key failed.
-
-    The caller saw an error and the memory was in the store anyway, so writing
-    it again produced two of them.
-    """
+    """The node was committed before its edges, so a bad link left it behind."""
     result = await add_memory(
         title="Orphan",
         summary="must not survive a failed link",

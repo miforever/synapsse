@@ -35,10 +35,9 @@ def embedding_text(
     body is truncated: embedding models have a token limit, and a long note
     would otherwise dilute its own topic into an average of everything in it.
 
-    Tags are included because they are frequently the only place a theme is
-    named. A memory tagged `jealousy` whose prose never uses the word would
-    otherwise be unreachable by meaning — which is the half of the class/tag
-    split that search is supposed to make answerable.
+    Tags are included because they are often the only place a theme is named,
+    and a memory tagged `jealousy` whose prose never says it should still be
+    reachable by meaning.
     """
     joined = " ".join(tags or [])
     return f"{title}\n{summary}\n{joined}\n{content[:2000]}".strip()
@@ -180,12 +179,9 @@ async def delete_node(conn: aiosqlite.Connection, node_id: str) -> bool:
 def _words(text: str) -> list[str]:
     """Bare words, with everything FTS5 reads as syntax removed.
 
-    Only the characters that are syntax *outside* a quoted string are taken
-    out. Every term this builds is quoted, and inside quotes FTS5 has no
-    operators — so `-`, `:` and `.` survive, and `claude-code` or `main.py:42`
-    stays one phrase instead of splintering into unrelated words. Identifiers
-    are exactly what a caller types when they want a literal match, and
-    splitting them was turning the most precise queries into the loosest.
+    Only what is syntax *outside* a quoted string: every term built here is
+    quoted, and inside quotes FTS5 has no operators. So `-`, `:` and `.`
+    survive, and `claude-code` stays one phrase rather than two words.
     """
     return re.sub(r'["*^()]', " ", text).split()
 
@@ -247,10 +243,9 @@ async def summaries_for(
 async def missing_ids(conn: aiosqlite.Connection, node_ids: list[str]) -> list[str]:
     """Which of `node_ids` are not in the store, in the order given.
 
-    Asked before a write that would create edges to them. A foreign key does
-    catch these, but only after the node itself is committed — leaving a
-    memory in the store and an error in the agent's hands, which is how one
-    bad id becomes two copies of the same memory.
+    Asked before a write that would link to them: the foreign key catches an
+    unknown id only after the node is committed, leaving a stored memory and
+    an error in the caller's hands.
     """
     if not node_ids:
         return []

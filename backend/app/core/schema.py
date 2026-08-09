@@ -185,13 +185,8 @@ ADDITIONS: tuple[str, ...] = (
     "ALTER TABLE nodes ADD COLUMN target_date TEXT",
 )
 
-# How long a tombstone is worth keeping.
-#
-# It exists so a client with a cached graph learns that a memory was removed.
-# A client that has not asked in ninety days is not applying a delta — it is
-# reloading from scratch, and the row it would have used is a row nothing will
-# ever read again. Without this the table is the one part of the store that
-# only ever grows, in a product whose pitch is a single tidy file.
+# A client that has not asked what changed in ninety days is reloading from
+# scratch, not applying a delta, so its tombstones will never be read again.
 TOMBSTONE_RETENTION_DAYS = 90
 
 PRUNE_TOMBSTONES = f"""

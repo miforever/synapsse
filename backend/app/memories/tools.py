@@ -129,10 +129,9 @@ async def add_memory(
     off everything else — a fact is not "todo". Memories carrying a status
     appear on the roadmap.
     """
-    # Checked before anything is written. The foreign key would catch an
-    # unknown target on its own, but only once the node is committed: the
-    # memory would be stored, the tool would answer with an error, and the
-    # agent would write it a second time.
+    # Before anything is written: the foreign key catches an unknown target
+    # only after the node is committed, and the caller retries a write that
+    # actually landed.
     if unknown := await nodes_service.missing_ids(db.conn, linked_to or []):
         return {
             "error": "No memory with these ids: " + ", ".join(unknown),

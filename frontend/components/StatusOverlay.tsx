@@ -141,9 +141,8 @@ function CopyIcon({ copied }: { copied: boolean }) {
 
 function CopyBlock({ code, clamped = false }: { code: string; clamped?: boolean }) {
   const [copied, setCopied] = useState(false);
-  // Only the long self-setup prompt asks to be clipped; the per-client
-  // commands are one line and must never be, since a command you cannot read
-  // whole is a command you cannot trust.
+  // Only the prompts clip. A command you cannot read whole is one you cannot
+  // trust, so the per-client snippets never do.
   const [open, setOpen] = useState(false);
   const clipped = clamped && !open;
 
@@ -157,8 +156,6 @@ function CopyBlock({ code, clamped = false }: { code: string; clamped?: boolean 
         {code}
       </pre>
       {clipped && (
-        // Fades the cut instead of slicing a line in half, so it reads as
-        // "continues" rather than "ends badly".
         <span
           aria-hidden="true"
           className="pointer-events-none absolute inset-x-px bottom-px h-10 rounded-b-lg bg-gradient-to-b from-transparent to-canvas"
@@ -184,8 +181,6 @@ function CopyBlock({ code, clamped = false }: { code: string; clamped?: boolean 
       </button>
 
       {clamped && (
-        // Below the box it controls, not above it: a toggle that appears over
-        // the thing it expands reads as a heading for it.
         <button
           type="button"
           onClick={() => setOpen((value) => !value)}
@@ -259,17 +254,8 @@ function ConnectPanel() {
               {client.note}
             </p>
 
-            {/* The same setup, handed over instead of done by hand.
-             *
-             * Inside the panel because there is no single prompt that suits
-             * everyone: each client keeps its servers in a different file, and
-             * only one of them has a per-message hook to register at all. One
-             * shared prompt had to quote some client's paths, and read as
-             * though the paste only worked there under every other tab.
-             *
-             * Clipped rather than folded away — collapsing it put the copy
-             * button behind a click, which is the one control anyone came
-             * here to press. */}
+            {/* Per client, not shared: each keeps its servers in a different
+                file, and only Claude Code has a hook to register. */}
             <div className="mt-4 border-t border-line/[.08] pt-3">
               <p className="text-xs text-muted">Or just say it</p>
               <p className="mt-1 text-[11px] leading-relaxed text-faint">

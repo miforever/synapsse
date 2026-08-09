@@ -13,18 +13,10 @@ Claude Code adds a UserPromptSubmit hook's stdout to the model's context, so
 the memories arrive *before* the model has decided anything, with no tool call
 to remember and no judgement to exercise.
 
-Design rules, in order of importance:
-
-1. Never block the prompt. A daemon that is down, slow, or returning nonsense
-   must cost the user nothing. Every failure path prints nothing and exits 0.
-2. Be fast. This is on the critical path of every message. One HTTP GET to
-   loopback, with a hard timeout well under a second of perceived delay.
-3. Be honest about what it is. The block is labelled as recalled background,
-   not as instructions, because the memories are agent-written text and should
-   never be able to impersonate the user.
-
-Requires nothing outside the standard library, so it runs under whatever
-Python the user already has.
+Never blocks the prompt: every failure path prints nothing and exits 0, since
+a store that is down must cost the user nothing. One GET to loopback, because
+this sits on the critical path of every message. Standard library only, so it
+runs under whatever Python is already there.
 """
 
 from __future__ import annotations
