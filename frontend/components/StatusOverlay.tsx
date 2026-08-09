@@ -37,6 +37,11 @@ const CLIENTS = [
     where: "One command, from anywhere",
     code: `claude mcp add --scope user --transport http synapsse ${MCP_URL}`,
     note: "--scope user puts it in every project; drop it for this one only, or commit the server to a repo in .mcp.json",
+    prompt: `Set up SYNAPSSE, my local memory graph, and use it from now on.
+
+1. Add the MCP server: claude mcp add --scope user --transport http synapsse ${MCP_URL} — the --scope user matters, it registers the server for every project rather than only this folder.
+2. Make recall automatic: add a UserPromptSubmit command hook in ~/.claude/settings.json running python3 /full/path/to/synapsse/hooks/synapsse_recall.py, alongside any hooks already there rather than replacing them. Ask me where the folder is if you cannot find it.
+3. Then tell me what I have to do myself: restart for the MCP tools to attach (claude --continue keeps this conversation), and open /hooks once so the new hook is read.`,
   },
   {
     id: "cursor",
@@ -48,6 +53,11 @@ const CLIENTS = [
   }
 }`,
     note: "Or .cursor/mcp.json, to keep it to one project",
+    prompt: `Set up SYNAPSSE, my local memory graph, and use it from now on.
+
+1. Add the MCP server to ~/.cursor/mcp.json, so it is there in every project: {"mcpServers":{"synapsse":{"url":"${MCP_URL}"}}} — use .cursor/mcp.json instead only if I tell you I want it in this project alone.
+2. Add a standing rule wherever you keep them: write to SYNAPSSE as you work — preferences, decisions and their reasons, people, problems and what fixed them — and search it before asking me something I may have already answered.
+3. Then tell me to restart, since MCP servers are connected when a session starts and this one cannot see the server it just added.`,
   },
   {
     id: "gemini",
@@ -59,6 +69,11 @@ const CLIENTS = [
   }
 }`,
     note: "The key is httpUrl — that is what Gemini CLI uses for HTTP servers",
+    prompt: `Set up SYNAPSSE, my local memory graph, and use it from now on.
+
+1. Add the MCP server to ~/.gemini/settings.json: {"mcpServers":{"synapsse":{"httpUrl":"${MCP_URL}"}}} — the key is httpUrl, which is what Gemini CLI uses for streamable HTTP.
+2. Add a standing rule wherever you keep them: write to SYNAPSSE as you work — preferences, decisions and their reasons, people, problems and what fixed them — and search it before asking me something I may have already answered.
+3. Then tell me to restart, since MCP servers are connected when a session starts and this one cannot see the server it just added.`,
   },
   {
     id: "antigravity",
@@ -70,36 +85,25 @@ const CLIENTS = [
   }
 }`,
     note: "In the IDE: Manage MCP Servers → View raw config. The key is serverUrl",
-  },
-] as const;
+    prompt: `Set up SYNAPSSE, my local memory graph, and use it from now on.
 
-/*
- * The shortcut, for assistants that can edit their own configuration.
- *
- * Deliberately not one of the tabs above. Those name a client and a file, and
- * every one of them is true wherever you are; this is a request handed to
- * whatever you are talking to, and it only works if that thing can write to
- * your machine. Presenting it as the first tab implied it was the normal route
- * and left everyone else reading a paragraph aimed past them.
- *
- * Every instruction in it exists because leaving it out produced the wrong
- * setup in practice. Agents default to the narrowest MCP scope, so a memory
- * meant for every project lands in whichever folder the chat happened to start
- * in. Left to itself no agent installs the recall hook, because nothing in the
- * MCP handshake mentions one. And nothing tells the user why a freshly added
- * server appears broken until the client restarts.
- *
- * Deliberately names no client and quotes no command. Sitting under tabs that
- * each name one, a Claude Code flag in here read as though the paste only
- * worked there. What got the scope right was stating the requirement — every
- * project, widest scope available — not supplying the exact flag, and a
- * requirement is something any assistant can carry out in its own config.
- */
-const SELF_SETUP_PROMPT = `Set up SYNAPSSE, my local memory graph, and use it from now on.
+1. Add the MCP server to ~/.gemini/config/mcp_config.json: {"mcpServers":{"synapsse":{"serverUrl":"${MCP_URL}"}}} — the key is serverUrl.
+2. Add a standing rule wherever you keep them: write to SYNAPSSE as you work — preferences, decisions and their reasons, people, problems and what fixed them — and search it before asking me something I may have already answered.
+3. Then tell me to restart, since MCP servers are connected when a session starts and this one cannot see the server it just added.`,
+  },
+  {
+    id: "other",
+    name: "Anything else",
+    where: "Any client that speaks MCP",
+    code: MCP_URL,
+    note: "Point it at that URL over streamable HTTP, in whichever file it keeps its servers in",
+    prompt: `Set up SYNAPSSE, my local memory graph, and use it from now on.
 
 1. Add an MCP server named "synapsse" at ${MCP_URL} using streamable HTTP transport. Register it for every project rather than only the one we are in — use the widest scope your configuration offers.
-2. If you support hooks that run on every message I send, make recall automatic: register hooks/synapsse_recall.py from the synapsse folder as one, alongside any hooks already configured rather than replacing them. Ask me where the folder is if you cannot find it.
-3. Then tell me plainly what I have to do myself before either takes effect — the restart that attaches the MCP tools, and the reload that picks up the hook.`;
+2. If you support hooks that run on every message I send, register hooks/synapsse_recall.py from the synapsse folder as one, alongside any hooks already configured rather than replacing them. If you do not: add a standing rule wherever you keep them: write to SYNAPSSE as you work — preferences, decisions and their reasons, people, problems and what fixed them — and search it before asking me something I may have already answered.
+3. Then tell me plainly what I have to do myself before either takes effect — the restart that attaches the MCP tools, and the reload that picks up the hook.`,
+  },
+] as const;
 
 const TRIGGERS = [
   "You state a preference, or correct how it did something",
@@ -178,6 +182,19 @@ function CopyBlock({ code, clamped = false }: { code: string; clamped?: boolean 
       >
         <CopyIcon copied={copied} />
       </button>
+
+      {clamped && (
+        // Below the box it controls, not above it: a toggle that appears over
+        // the thing it expands reads as a heading for it.
+        <button
+          type="button"
+          onClick={() => setOpen((value) => !value)}
+          aria-expanded={open}
+          className="mt-2 font-mono text-[11px] text-cyan/70 transition-colors hover:text-cyan"
+        >
+          {open ? "− collapse it again" : "+ read the whole prompt"}
+        </button>
+      )}
     </div>
   );
 }
@@ -241,27 +258,28 @@ function ConnectPanel() {
             <p className="mt-2 text-[11px] leading-relaxed text-faint">
               {client.note}
             </p>
+
+            {/* The same setup, handed over instead of done by hand.
+             *
+             * Inside the panel because there is no single prompt that suits
+             * everyone: each client keeps its servers in a different file, and
+             * only one of them has a per-message hook to register at all. One
+             * shared prompt had to quote some client's paths, and read as
+             * though the paste only worked there under every other tab.
+             *
+             * Clipped rather than folded away — collapsing it put the copy
+             * button behind a click, which is the one control anyone came
+             * here to press. */}
+            <div className="mt-4 border-t border-line/[.08] pt-3">
+              <p className="text-xs text-muted">Or just say it</p>
+              <p className="mt-1 text-[11px] leading-relaxed text-faint">
+                Paste this instead, and the assistant does all of the above
+                itself — plus the recall hook.
+              </p>
+              <CopyBlock code={client.prompt} clamped />
+            </div>
           </motion.div>
         </AnimatePresence>
-      </div>
-
-      {/* Not a tab. Those name a client and a config file and are true wherever
-          you are; this is a request handed to whatever you happen to be talking
-          to, and only works if that thing can write to your machine.
-
-          The card stays open and only the text is clipped — collapsing the
-          whole thing put the copy button behind a click, which is the one
-          control anyone came here to press. */}
-      <div className="border-t border-line/[.08] p-3.5">
-        <p className="text-xs text-muted">
-          Or just say it — hand the whole setup to the assistant
-        </p>
-        <p className="mt-1 text-[11px] leading-relaxed text-faint">
-          For any assistant that can edit its own configuration. One paste
-          covers the server, the global scope and the recall hook. If yours
-          cannot write to your machine, use a tab above.
-        </p>
-        <CopyBlock code={SELF_SETUP_PROMPT} clamped />
       </div>
     </div>
   );
