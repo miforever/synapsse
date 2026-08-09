@@ -5,6 +5,7 @@ import aiosqlite
 from app.memories.models import NodeCreate, NodeUpdate
 from app.memories.nodes import create_node, delete_node, update_node
 from app.search import vectors
+from app.search.embeddings import set_embedder
 from app.search.service import RRF_K, fuse, search
 
 
@@ -126,6 +127,45 @@ async def test_results_are_capped(conn: aiosqlite.Connection) -> None:
             conn, NodeCreate(type="idea", title=f"Note {index}", summary="shared words")
         )
     assert len(await search(conn, "shared words", limit=3)) == 3
+
+
+async def test_keyword_mode_admits_only_text_matches(
+    conn: aiosqlite.Connection,
+) -> None:
+    """The point of the mode: nothing arrives on similarity alone."""
+    await create_node(
+        conn, NodeCreate(type="fact", title="Postgres tuning", summary="database")
+    )
+    await create_node(
+        conn, NodeCreate(type="idea", title="Unrelated", summary="something else")
+    )
+
+    assert len(await search(conn, "Postgres", limit=5)) == 2
+    keyword = await search(conn, "Postgres", limit=5, mode="keyword")
+    assert [r.title for r in keyword] == ["Postgres tuning"]
+
+
+async def test_keyword_mode_honours_a_phrase(conn: aiosqlite.Connection) -> None:
+    await create_node(
+        conn,
+        NodeCreate(type="fact", title="Local-first memory graph", summary="s"),
+    )
+    await create_node(
+        conn,
+        NodeCreate(type="fact", title="Graph of the memory", summary="s"),
+    )
+
+    results = await search(conn, '"memory graph"', limit=5, mode="keyword")
+    assert [r.title for r in results] == ["Local-first memory graph"]
+
+
+async def test_keyword_mode_needs_no_embedder(conn: aiosqlite.Connection) -> None:
+    """Nothing is embedded, so the mode answers before the model is downloaded."""
+    await create_node(conn, NodeCreate(type="fact", title="Offline", summary="s"))
+    set_embedder(None)
+
+    results = await search(conn, "Offline", limit=5, mode="keyword")
+    assert [r.title for r in results] == ["Offline"]
 
 
 async def test_search_survives_without_vectors(conn: aiosqlite.Connection) -> None:

@@ -10,15 +10,24 @@ Results are combined with reciprocal rank fusion, which merges rankings
 without needing the two scores to be comparable — a keyword rank and a cosine
 distance have no common scale, so blending the raw numbers would mean
 inventing a conversion and tuning it forever.
+
+The fusion is the default rather than the only option. A caller who knows the
+literal string they are after — an identifier, an error message, a name — is
+badly served by a paraphrase outranking it, so `mode="keyword"` drops the
+semantic half and answers from the text alone.
 """
+
+from typing import Literal
 
 import aiosqlite
 
-from app.core.queries import fetch_all, row_to_dict
+from app.core.queries import fetch_all
 from app.memories.models import NodeSearchResult
-from app.memories.nodes import build_fts_query
+from app.memories.nodes import build_fts_query, summaries_for
 from app.search import vectors
 from app.search.embeddings import embed_query
+
+SearchMode = Literal["hybrid", "keyword"]
 
 # Damps the influence of top ranks so one engine cannot dominate the other.
 # 60 is the value from the original RRF paper and behaves well without tuning.
@@ -35,12 +44,6 @@ JOIN nodes ON nodes.id = nodes_fts.id
 WHERE nodes_fts MATCH ?
 ORDER BY rank
 LIMIT ?
-"""
-
-_BY_IDS = """
-SELECT id, type, title, summary
-FROM nodes
-WHERE id IN ({placeholders})
 """
 
 
@@ -75,25 +78,28 @@ def fuse(rankings: list[list[str]], limit: int) -> list[str]:
 
 
 async def search(
-    conn: aiosqlite.Connection, query: str, limit: int = 5
+    conn: aiosqlite.Connection,
+    query: str,
+    limit: int = 5,
+    mode: SearchMode = "hybrid",
 ) -> list[NodeSearchResult]:
-    """Search memories by keyword and meaning together."""
+    """Search memories by keyword and meaning together, or by keyword alone.
+
+    In `keyword` mode nothing is embedded and nothing is fused: results are the
+    full-text ranking as SQLite ordered it, so the same query returns the same
+    memories in the same order every time.
+    """
     if not query.strip():
         return []
 
     depth = limit * CANDIDATE_MULTIPLIER
     keyword = await _keyword_ranking(conn, query, depth)
-    semantic = await _semantic_ranking(conn, query, depth)
+    semantic = [] if mode == "keyword" else await _semantic_ranking(conn, query, depth)
 
     ranked = fuse([r for r in (keyword, semantic) if r], limit)
     if not ranked:
         return []
 
-    placeholders = ",".join("?" for _ in ranked)
-    rows = await fetch_all(conn, _BY_IDS.format(placeholders=placeholders), ranked)
-
     # SQL returns rows unordered; restore the fused ranking.
-    by_id = {
-        row["id"]: NodeSearchResult.model_validate(row_to_dict(row)) for row in rows
-    }
+    by_id = await summaries_for(conn, ranked)
     return [by_id[node_id] for node_id in ranked if node_id in by_id]

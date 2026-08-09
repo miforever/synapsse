@@ -177,6 +177,11 @@ async def delete_node(conn: aiosqlite.Connection, node_id: str) -> bool:
     return cursor.rowcount > 0
 
 
+def _words(text: str) -> list[str]:
+    """Bare words, with everything FTS5 reads as syntax removed."""
+    return re.sub(r'["*^:()\-]', " ", text).split()
+
+
 def build_fts_query(raw: str) -> str:
     """Turn free text into a safe FTS5 expression.
 
@@ -184,9 +189,51 @@ def build_fts_query(raw: str) -> str:
     raises a syntax error rather than returning nothing. Each word is stripped
     of syntax characters and quoted, then given a `*` so search-as-you-type
     matches prefixes — typing "syn" should find "SYNAPSSE".
+
+    Double quotes survive as a phrase: `"memory graph"` matches those two words
+    adjacent and in that order, and takes no `*`, because someone who quotes a
+    string is asking for that string and not for everything starting with it.
+    An unclosed quote is treated as loose words — mid-typing is the normal way
+    to see one, and erroring on it would make the box flicker.
     """
-    terms = [re.sub(r'["*^:()\-]', " ", word).strip() for word in raw.split()]
-    return " ".join(f'"{term}"*' for term in terms if term)
+    segments = raw.split('"')
+    terms: list[str] = []
+
+    for index, segment in enumerate(segments):
+        # Odd segments sit between a pair of quotes. The last one never does:
+        # reaching it means the closing quote was never typed.
+        if index % 2 == 1 and index < len(segments) - 1:
+            if words := _words(segment):
+                terms.append('"{}"'.format(" ".join(words)))
+        else:
+            terms.extend(f'"{word}"*' for word in _words(segment))
+
+    return " ".join(terms)
+
+
+_SUMMARIES = """
+SELECT id, type, title, summary
+FROM nodes
+WHERE id IN ({placeholders})
+"""
+
+
+async def summaries_for(
+    conn: aiosqlite.Connection, node_ids: list[str]
+) -> dict[str, NodeSearchResult]:
+    """Index-sized rows for a set of ids, keyed by id.
+
+    A dict rather than a list because every caller has an order of its own —
+    a fused ranking, a walked path — and SQL will not return one.
+    """
+    if not node_ids:
+        return {}
+
+    placeholders = ",".join("?" for _ in node_ids)
+    rows = await fetch_all(conn, _SUMMARIES.format(placeholders=placeholders), node_ids)
+    return {
+        row["id"]: NodeSearchResult.model_validate(row_to_dict(row)) for row in rows
+    }
 
 
 async def search_index(

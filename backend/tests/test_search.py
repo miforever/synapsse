@@ -54,9 +54,31 @@ async def test_blank_query_returns_empty(seeded: aiosqlite.Connection) -> None:
     assert await search_index(seeded, "   ") == []
 
 
+async def test_phrase_requires_adjacency(seeded: aiosqlite.Connection) -> None:
+    """The words are both there; in that order and adjacent, they are not."""
+    assert len(await search_index(seeded, '"memory graph"')) == 1
+    assert await search_index(seeded, '"graph memory"') == []
+
+
 def test_build_fts_query_quotes_and_prefixes() -> None:
     assert build_fts_query("memory graph") == '"memory"* "graph"*'
 
 
+def test_build_fts_query_keeps_a_phrase_whole() -> None:
+    """Quoting is how a caller says "this string", so it loses the prefix `*`."""
+    assert build_fts_query('"memory graph"') == '"memory graph"'
+
+
+def test_build_fts_query_mixes_phrase_and_loose_words() -> None:
+    assert build_fts_query('local "memory graph" fast') == (
+        '"local"* "memory graph" "fast"*'
+    )
+
+
+def test_build_fts_query_unclosed_quote_falls_back_to_words() -> None:
+    """Half-typed input is the normal case, not an error."""
+    assert build_fts_query('unbalanced "quote') == '"unbalanced"* "quote"*'
+
+
 def test_build_fts_query_strips_syntax() -> None:
-    assert build_fts_query('AND "quoted"') == '"AND"* "quoted"*'
+    assert build_fts_query("AND (quoted)") == '"AND"* "quoted"*'
