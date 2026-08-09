@@ -161,6 +161,55 @@ asking me something I may have already answered.
 Belt and braces, for the same reason a reminder written in two places gets
 read.
 
+### Recall without being asked
+
+Writing is the easy half. The hard half is being *read* — and an agent only
+searches when it occurs to it to search, which is not the case where recall
+would have paid. It does not know what it does not know.
+
+No server can fix that, because the decision to retrieve happens in the client.
+A hook can. `hooks/synapsse_recall.py` runs on every message you send, searches
+the store with your own words, and prints what it finds into the model's
+context *before* the model decides anything — no tool call to remember, no
+judgement to exercise.
+
+For Claude Code, in `~/.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /absolute/path/to/synapsse/hooks/synapsse_recall.py"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+It needs nothing outside the standard library, adds about 130ms to a message,
+and is written so that every failure — daemon down, still loading, answering
+nonsense — prints nothing and costs you nothing. Short prompts ("yes", "go on")
+and slash commands are skipped rather than searched.
+
+Tune it with the environment, where it is registered:
+
+| Variable | Default | |
+| --- | --- | --- |
+| `SYNAPSSE_URL` | `http://127.0.0.1:8000` | Where the daemon is |
+| `SYNAPSSE_TOKEN` | — | Sent as `X-Synapsse-Token` when set |
+| `SYNAPSSE_RECALL_LIMIT` | `5` | Memories injected per message |
+| `SYNAPSSE_RECALL_TIMEOUT` | `1.5` | Seconds before giving up silently |
+
+The block is labelled as background rather than instruction, deliberately: the
+summaries were written by an earlier agent session, and a note must never be
+able to issue orders to a later one just by phrasing itself as a command.
+
 ## Memory model
 
 Each memory is a **node** — a title, a short summary for cheap index reads, a
