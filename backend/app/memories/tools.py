@@ -13,6 +13,7 @@ from app.core.database import db
 from app.mcp.instance import mcp
 from app.memories import edges as edges_service
 from app.memories import nodes as nodes_service
+from app.memories import paths as paths_service
 from app.memories.models import EdgeCreate, NodeCreate, NodeUpdate
 from app.ws.events import (
     broadcast_new_node,
@@ -55,6 +56,25 @@ async def traverse_graph(node_id: str, depth: int = 1) -> dict[str, list[str]]:
 
 
 @mcp.tool
+async def find_path(
+    source_id: str, target_id: str, max_depth: int = paths_service.DEFAULT_DEPTH
+) -> dict[str, object]:
+    """Explain how two memories are connected, by the shortest route between.
+
+    The question traverse_graph cannot answer: not what is near a memory, but
+    what stands between this one and that one — the decision behind an issue,
+    the person behind a project. Returns the chain of memories with the edges
+    joining them, id/title-sized; read_node whichever link matters.
+
+    Empty when nothing connects them within max_depth. Edges are followed in
+    both directions, since how two memories relate does not depend on which of
+    them happened to be written first.
+    """
+    path = await paths_service.path_between(db.conn, source_id, target_id, max_depth)
+    return path.model_dump(mode="json")
+
+
+@mcp.tool
 async def add_memory(
     title: str,
     summary: str,
@@ -69,8 +89,31 @@ async def add_memory(
 ) -> dict[str, object]:
     """Persist a new memory, its tags, and optional edges to existing nodes.
 
-    An unrecognized `type` is registered automatically rather than rejected;
-    call list_types() first to reuse the existing vocabulary where it fits.
+    Search first: a second memory of the same fact does not replace the first,
+    it competes with it. Use update_memory when something changed.
+
+    `type` is the memory's class — the coarse shape of the thing (person,
+    project, issue, decision, fact, preference...). Everything specific about
+    this one belongs in `tags` instead. A girlfriend is a person tagged
+    `girlfriend`, not a class of her own; a recurring argument is an issue
+    tagged with who it involves. An unrecognized `type` is registered rather
+    than rejected, so call list_types() and list_tags() first and reuse what
+    is there — a shared class is worth more than an exact one.
+
+    Keep a memory to a single thing. A problem and what fixed it are two
+    memories with an edge between them, not one note about both: that way the
+    fix can also be linked to the other problems it solved, and revising it
+    later does not rewrite the history of the problem.
+
+    `summary` is the one line other agents read at index time — put the fact in
+    it ("prefers being asked before advice"), not a description of the memory
+    ("notes on communication"). `content` takes the reasoning and the detail.
+
+    `linked_to` connects this to what it is about — the person, the project,
+    the decision it followed from. An unlinked memory is nearly unreachable.
+    These edges are `relates_to`; call link_memories afterwards for the more
+    specific depends_on, blocks or part_of, which are the ones that carry
+    meaning.
 
     `files` are paths on this machine, copied into the daemon's own store.
     Mention one from `content` as `[[file:NAME]]` and the canvas renders it
@@ -236,7 +279,18 @@ async def link_memories(
     relation_type: str = "relates_to",
     weight: float = 1.0,
 ) -> dict[str, object]:
-    """Connect two existing memories."""
+    """Connect two existing memories.
+
+    Pick the relation that is true: `depends_on` (this needs that first),
+    `blocks` (this is stopping that), `part_of` (this belongs inside that), or
+    `relates_to` when the link is real but unstructured. Prefer a specific one
+    — `relates_to` everywhere says little more than no edge at all, and the
+    roadmap ignores it for exactly that reason.
+
+    Worth linking across topics, not only within them: the trait that explains
+    both a disagreement with someone and a delay on a project is the connection
+    this store exists to hold, and the one nobody writes down.
+    """
     edge = await edges_service.create_edge(
         db.conn,
         EdgeCreate(

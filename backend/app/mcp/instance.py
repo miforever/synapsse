@@ -2,4 +2,6 @@
 
 from fastmcp import FastMCP
 
-mcp: FastMCP = FastMCP("synapsse")
+from app.mcp.guidance import INSTRUCTIONS
+
+mcp: FastMCP = FastMCP("synapsse", instructions=INSTRUCTIONS)

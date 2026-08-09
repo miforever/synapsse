@@ -97,6 +97,22 @@ class EdgeOut(BaseModel):
     created_at: datetime
 
 
+class PathOut(BaseModel):
+    """How two memories are connected: the nodes walked, and the edges between.
+
+    `edges[i]` joins `nodes[i]` to `nodes[i + 1]`, so there is always one fewer
+    edge than node. Which way round an edge points is left to be read off its
+    own source_id — a path is walked in one direction, but `depends_on` means
+    the opposite thing when it is traversed backwards, and flattening that away
+    would make the chain read wrong.
+
+    Both lists are empty when nothing links the two within the depth searched.
+    """
+
+    nodes: list[NodeSearchResult] = Field(default_factory=list)
+    edges: list[EdgeOut] = Field(default_factory=list)
+
+
 class TagOut(BaseModel):
     name: str
     count: int

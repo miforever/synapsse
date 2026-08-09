@@ -82,6 +82,78 @@ async def traverse_graph(
     return visited
 
 
+async def find_path(
+    conn: aiosqlite.Connection, source_id: str, target_id: str, max_depth: int = 6
+) -> list[str]:
+    """The shortest chain of memories linking two nodes, source first.
+
+    Breadth-first, so the first route found is the shortest one, and expanded a
+    whole hop per query the way traverse_graph is — a path of six across a
+    branching graph is thousands of nodes, and asking about each one separately
+    would cost a round trip apiece.
+
+    Edges are followed in both directions. `depends_on` points one way, but "how
+    are these two connected" is a question about the graph's shape rather than
+    about which end was written first, and a search that only ran downstream
+    would miss the answer most of the time.
+
+    Returns [] when nothing links them within `max_depth`, which is not the same
+    as no relationship existing — only that none is this short.
+    """
+    if source_id == target_id:
+        return [source_id]
+
+    # Where each node was first reached from, which is also the visited set.
+    came_from: dict[str, str] = {}
+    frontier = {source_id}
+
+    for _ in range(max(max_depth, 0)):
+        if not frontier:
+            break
+
+        reached: set[str] = set()
+        for current, neighbours in (await _neighbours_of(conn, frontier)).items():
+            for neighbour in neighbours:
+                if neighbour == source_id or neighbour in came_from:
+                    continue
+                came_from[neighbour] = current
+                if neighbour == target_id:
+                    return _rebuild_path(came_from, source_id, target_id)
+                reached.add(neighbour)
+
+        frontier = reached
+
+    return []
+
+
+def _rebuild_path(
+    came_from: dict[str, str], source_id: str, target_id: str
+) -> list[str]:
+    """Walk the breadcrumbs back to the source, then read them forwards."""
+    path = [target_id]
+    while path[-1] != source_id:
+        path.append(came_from[path[-1]])
+    return list(reversed(path))
+
+
+async def edges_between(
+    conn: aiosqlite.Connection, node_ids: list[str]
+) -> list[EdgeOut]:
+    """Every edge with both ends inside `node_ids`."""
+    if not node_ids:
+        return []
+
+    placeholders = ",".join("?" for _ in node_ids)
+    rows = await fetch_all(
+        conn,
+        # noqa: S608 — placeholders are generated, never interpolated values.
+        f"SELECT * FROM edges "  # noqa: S608
+        f"WHERE source_id IN ({placeholders}) AND target_id IN ({placeholders})",
+        (*node_ids, *node_ids),
+    )
+    return [_to_edge(row) for row in rows]
+
+
 async def _neighbours_of(
     conn: aiosqlite.Connection, node_ids: set[str]
 ) -> dict[str, list[str]]:

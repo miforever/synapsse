@@ -5,7 +5,8 @@ from fastapi import APIRouter, HTTPException
 from app.core.database import db
 from app.memories import edges as edges_service
 from app.memories import nodes as nodes_service
-from app.memories.models import NodeOut, NodeUpdate
+from app.memories import paths as paths_service
+from app.memories.models import NodeOut, NodeUpdate, PathOut
 from app.ws.events import broadcast_node_deleted, broadcast_node_updated
 
 router = APIRouter(tags=["memories"])
@@ -18,6 +19,23 @@ async def read_node(node_id: str) -> NodeOut:
     if node is None:
         raise HTTPException(status_code=404, detail="Node not found")
     return node
+
+
+@router.get("/path")
+async def read_path(
+    source: str, target: str, max_depth: int = paths_service.DEFAULT_DEPTH
+) -> PathOut:
+    """The shortest chain of memories linking two nodes.
+
+    404 when either end does not exist, because that is a mistake in the
+    request. Two real memories with nothing between them are not — the path
+    comes back empty, which is an answer.
+    """
+    for node_id in (source, target):
+        if await nodes_service.get_node(db.conn, node_id) is None:
+            raise HTTPException(status_code=404, detail=f"Node not found: {node_id}")
+
+    return await paths_service.path_between(db.conn, source, target, max_depth)
 
 
 @router.patch("/nodes/{node_id}")
