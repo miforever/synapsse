@@ -32,25 +32,6 @@ const MCP_URL = "http://localhost:8000/mcp";
  */
 const CLIENTS = [
   {
-    id: "ask",
-    name: "Just ask it",
-    where: "Paste into the agent's chat — it will do the rest",
-    /*
-     * Every instruction here exists because leaving it out produced the wrong
-     * setup in practice. Agents default to the narrowest MCP scope, so a memory
-     * meant for every project ends up registered in whichever folder the chat
-     * happened to start in. And left to itself no agent installs the recall
-     * hook, because nothing in the MCP handshake mentions it — which is how you
-     * end up with a store that is written to and never read.
-     */
-    code: `Set up SYNAPSSE, my local memory graph, and use it from now on.
-
-1. Add an MCP server named "synapsse" at ${MCP_URL} using streamable HTTP transport. Register it globally, for every project, not only this one — in Claude Code that is: claude mcp add --scope user --transport http synapsse ${MCP_URL}
-2. If you support hooks, make recall automatic: register hooks/synapsse_recall.py from the synapsse folder as a UserPromptSubmit hook. In Claude Code that is a command hook in ~/.claude/settings.json, added alongside any hooks already there rather than replacing them, running: python3 /full/path/to/synapsse/hooks/synapsse_recall.py — ask me for the path if you cannot find the folder.
-3. Tell me plainly what I have to do myself before either works: MCP tools attach when a session starts, so I need to restart the client (claude --continue keeps this conversation), and a newly added hook needs /hooks opened once, or a restart, before it is read.`,
-    note: "Most agents can edit their own MCP config and settings. The tabs beside this one are for when yours cannot, or when you would rather do it yourself",
-  },
-  {
     id: "claude",
     name: "Claude Code",
     where: "One command, from anywhere",
@@ -92,6 +73,28 @@ const CLIENTS = [
   },
 ] as const;
 
+/*
+ * The shortcut, for assistants that can edit their own configuration.
+ *
+ * Deliberately not one of the tabs above. Those name a client and a file, and
+ * every one of them is true wherever you are; this is a request handed to
+ * whatever you are talking to, and it only works if that thing can write to
+ * your machine. Presenting it as the first tab implied it was the normal route
+ * and left everyone else reading a paragraph aimed past them.
+ *
+ * Every instruction in it exists because leaving it out produced the wrong
+ * setup in practice. Agents default to the narrowest MCP scope, so a memory
+ * meant for every project lands in whichever folder the chat happened to start
+ * in. Left to itself no agent installs the recall hook, because nothing in the
+ * MCP handshake mentions one. And nothing tells the user why a freshly added
+ * server appears broken until the client restarts.
+ */
+const SELF_SETUP_PROMPT = `Set up SYNAPSSE, my local memory graph, and use it from now on.
+
+1. Add an MCP server named "synapsse" at ${MCP_URL} using streamable HTTP transport. Register it globally, for every project, not only the one we are in. (In Claude Code: claude mcp add --scope user --transport http synapsse ${MCP_URL})
+2. If you support hooks, make recall automatic: register hooks/synapsse_recall.py from the synapsse folder as a hook that runs on every message I send, added alongside any hooks already configured rather than replacing them. (In Claude Code: a UserPromptSubmit command hook in ~/.claude/settings.json running python3 /full/path/to/synapsse/hooks/synapsse_recall.py.) Ask me for the path if you cannot find the folder.
+3. Then tell me plainly what I have to do myself before either takes effect — the client restart that attaches the MCP tools, and the settings reload that picks up the hook.`;
+
 const TRIGGERS = [
   "You state a preference, or correct how it did something",
   "A decision is made, with a reason worth keeping",
@@ -126,16 +129,31 @@ function CopyIcon({ copied }: { copied: boolean }) {
   );
 }
 
-function CopyBlock({ code }: { code: string }) {
+function CopyBlock({ code, clamped = false }: { code: string; clamped?: boolean }) {
   const [copied, setCopied] = useState(false);
+  // Only the long self-setup prompt asks to be clipped; the per-client
+  // commands are one line and must never be, since a command you cannot read
+  // whole is a command you cannot trust.
+  const [open, setOpen] = useState(false);
+  const clipped = clamped && !open;
 
   return (
     <div className="group/copy relative mt-2.5">
-      {/* Wrapped and never truncated: a command you cannot read whole is a
-          command you cannot trust, and this is the first thing anyone runs. */}
-      <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-lg border border-line/[.1] bg-canvas/40 py-3 pl-3.5 pr-11 font-mono text-xs leading-relaxed text-cyan">
+      <pre
+        className={`overflow-x-auto whitespace-pre-wrap break-all rounded-lg border border-line/[.1] bg-canvas/40 py-3 pl-3.5 pr-11 font-mono text-xs leading-relaxed text-cyan ${
+          clipped ? "max-h-[5.4em] overflow-y-hidden" : ""
+        }`}
+      >
         {code}
       </pre>
+      {clipped && (
+        // Fades the cut instead of slicing a line in half, so it reads as
+        // "continues" rather than "ends badly".
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-px bottom-px h-10 rounded-b-lg bg-gradient-to-b from-transparent to-canvas"
+        />
+      )}
       <button
         type="button"
         onClick={() => {
@@ -219,6 +237,25 @@ function ConnectPanel() {
             </p>
           </motion.div>
         </AnimatePresence>
+      </div>
+
+      {/* Not a tab. Those name a client and a config file and are true wherever
+          you are; this is a request handed to whatever you happen to be talking
+          to, and only works if that thing can write to your machine.
+
+          The card stays open and only the text is clipped — collapsing the
+          whole thing put the copy button behind a click, which is the one
+          control anyone came here to press. */}
+      <div className="border-t border-line/[.08] p-3.5">
+        <p className="text-xs text-muted">
+          Or just say it — hand the whole setup to the assistant
+        </p>
+        <p className="mt-1 text-[11px] leading-relaxed text-faint">
+          For any assistant that can edit its own configuration. One paste
+          covers the server, the global scope and the recall hook. If yours
+          cannot write to your machine, use a tab above.
+        </p>
+        <CopyBlock code={SELF_SETUP_PROMPT} clamped />
       </div>
     </div>
   );
