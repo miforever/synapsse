@@ -24,24 +24,24 @@ INSERT INTO nodes
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 """
 _BY_ID = "SELECT * FROM nodes WHERE id = ?"
-_SEARCH = """
-SELECT nodes.id, nodes.type, nodes.title, nodes.summary
-FROM nodes_fts
-JOIN nodes ON nodes.id = nodes_fts.id
-WHERE nodes_fts MATCH ?
-ORDER BY rank
-LIMIT ?
-"""
 
 
-def embedding_text(title: str, summary: str, content: str) -> str:
+def embedding_text(
+    title: str, summary: str, content: str, tags: list[str] | None = None
+) -> str:
     """What gets embedded for a memory.
 
     Title and summary carry most of the meaning in the least text, and the
     body is truncated: embedding models have a token limit, and a long note
     would otherwise dilute its own topic into an average of everything in it.
+
+    Tags are included because they are frequently the only place a theme is
+    named. A memory tagged `jealousy` whose prose never uses the word would
+    otherwise be unreachable by meaning — which is the half of the class/tag
+    split that search is supposed to make answerable.
     """
-    return f"{title}\n{summary}\n{content[:2000]}".strip()
+    joined = " ".join(tags or [])
+    return f"{title}\n{summary}\n{joined}\n{content[:2000]}".strip()
 
 
 async def _reindex_vector(conn: aiosqlite.Connection, node: NodeOut) -> None:
@@ -54,7 +54,7 @@ async def _reindex_vector(conn: aiosqlite.Connection, node: NodeOut) -> None:
         return
     try:
         vector = await embed_document(
-            embedding_text(node.title, node.summary, node.content)
+            embedding_text(node.title, node.summary, node.content, node.tags)
         )
         await vectors.upsert(conn, node.id, vector)
         await conn.commit()
@@ -178,8 +178,16 @@ async def delete_node(conn: aiosqlite.Connection, node_id: str) -> bool:
 
 
 def _words(text: str) -> list[str]:
-    """Bare words, with everything FTS5 reads as syntax removed."""
-    return re.sub(r'["*^:()\-]', " ", text).split()
+    """Bare words, with everything FTS5 reads as syntax removed.
+
+    Only the characters that are syntax *outside* a quoted string are taken
+    out. Every term this builds is quoted, and inside quotes FTS5 has no
+    operators — so `-`, `:` and `.` survive, and `claude-code` or `main.py:42`
+    stays one phrase instead of splintering into unrelated words. Identifiers
+    are exactly what a caller types when they want a literal match, and
+    splitting them was turning the most precise queries into the loosest.
+    """
+    return re.sub(r'["*^()]', " ", text).split()
 
 
 def build_fts_query(raw: str) -> str:
@@ -236,14 +244,18 @@ async def summaries_for(
     }
 
 
-async def search_index(
-    conn: aiosqlite.Connection, query: str, limit: int = 5
-) -> list[NodeSearchResult]:
-    expression = build_fts_query(query)
-    if not expression:
+async def missing_ids(conn: aiosqlite.Connection, node_ids: list[str]) -> list[str]:
+    """Which of `node_ids` are not in the store, in the order given.
+
+    Asked before a write that would create edges to them. A foreign key does
+    catch these, but only after the node itself is committed — leaving a
+    memory in the store and an error in the agent's hands, which is how one
+    bad id becomes two copies of the same memory.
+    """
+    if not node_ids:
         return []
-    rows = await fetch_all(conn, _SEARCH, (expression, limit))
-    return [NodeSearchResult.model_validate(row_to_dict(row)) for row in rows]
+    found = await summaries_for(conn, node_ids)
+    return [node_id for node_id in node_ids if node_id not in found]
 
 
 _ROADMAP = """

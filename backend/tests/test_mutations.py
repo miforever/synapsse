@@ -25,15 +25,17 @@ async def test_update_changes_only_given_fields(conn: aiosqlite.Connection) -> N
 
 async def test_update_refreshes_search_index(conn: aiosqlite.Connection) -> None:
     """The FTS triggers must follow edits, or search returns stale titles."""
-    from app.memories.nodes import search_index
+    from app.search.service import search
 
     node = await create_node(
         conn, NodeCreate(type="idea", title="Aardvark", summary="s")
     )
     await update_node(conn, node.id, NodeUpdate(title="Zeppelin"))
 
-    assert await search_index(conn, "Aardvark") == []
-    assert [r.title for r in await search_index(conn, "Zeppelin")] == ["Zeppelin"]
+    assert await search(conn, "Aardvark", mode="keyword") == []
+    assert [r.title for r in await search(conn, "Zeppelin", mode="keyword")] == [
+        "Zeppelin"
+    ]
 
 
 async def test_update_bumps_updated_at(conn: aiosqlite.Connection) -> None:
@@ -96,13 +98,13 @@ async def test_delete_missing_node_reports_false(conn: aiosqlite.Connection) -> 
 
 
 async def test_deleted_node_leaves_search_index(conn: aiosqlite.Connection) -> None:
-    from app.memories.nodes import search_index
+    from app.search.service import search
 
     node = await create_node(
         conn, NodeCreate(type="idea", title="Ephemeral", summary="s")
     )
     await delete_node(conn, node.id)
-    assert await search_index(conn, "Ephemeral") == []
+    assert await search(conn, "Ephemeral", mode="keyword") == []
 
 
 async def test_unlink_keeps_both_nodes(conn: aiosqlite.Connection) -> None:

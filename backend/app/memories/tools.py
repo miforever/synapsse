@@ -44,8 +44,8 @@ async def read_node(node_id: str) -> dict[str, object] | None:
         return None
     connections = await edges_service.list_edges_for_node(db.conn, node_id)
     return {
-        "node": node.model_dump(),
-        "edges": [edge.model_dump() for edge in connections],
+        "node": node.model_dump(mode="json"),
+        "edges": [edge.model_dump(mode="json") for edge in connections],
     }
 
 
@@ -129,6 +129,18 @@ async def add_memory(
     off everything else — a fact is not "todo". Memories carrying a status
     appear on the roadmap.
     """
+    # Checked before anything is written. The foreign key would catch an
+    # unknown target on its own, but only once the node is committed: the
+    # memory would be stored, the tool would answer with an error, and the
+    # agent would write it a second time.
+    if unknown := await nodes_service.missing_ids(db.conn, linked_to or []):
+        return {
+            "error": "No memory with these ids: " + ", ".join(unknown),
+            "hint": "search_index for the right id, or omit linked_to and "
+            "connect the memory afterwards with link_memories.",
+            "written": False,
+        }
+
     node = await nodes_service.create_node(
         db.conn,
         NodeCreate(
@@ -176,7 +188,7 @@ async def add_memory(
     await broadcast_new_node(stored, created)
     return {
         "node": stored.model_dump(mode="json"),
-        "edges": [edge.model_dump() for edge in created],
+        "edges": [edge.model_dump(mode="json") for edge in created],
         "files": [item.model_dump(mode="json") for item in attached],
         "sources": [item.model_dump(mode="json") for item in cited],
     }
@@ -219,7 +231,7 @@ async def update_memory(
         return None
 
     await broadcast_node_updated(node)
-    return {"node": node.model_dump()}
+    return {"node": node.model_dump(mode="json")}
 
 
 @mcp.tool
@@ -291,6 +303,9 @@ async def link_memories(
     both a disagreement with someone and a delay on a project is the connection
     this store exists to hold, and the one nobody writes down.
     """
+    if unknown := await nodes_service.missing_ids(db.conn, [source_id, target_id]):
+        return {"error": "No memory with these ids: " + ", ".join(unknown)}
+
     edge = await edges_service.create_edge(
         db.conn,
         EdgeCreate(
@@ -300,7 +315,7 @@ async def link_memories(
             weight=weight,
         ),
     )
-    return {"edge": edge.model_dump()}
+    return {"edge": edge.model_dump(mode="json")}
 
 
 @mcp.tool

@@ -185,6 +185,22 @@ ADDITIONS: tuple[str, ...] = (
     "ALTER TABLE nodes ADD COLUMN target_date TEXT",
 )
 
+# How long a tombstone is worth keeping.
+#
+# It exists so a client with a cached graph learns that a memory was removed.
+# A client that has not asked in ninety days is not applying a delta — it is
+# reloading from scratch, and the row it would have used is a row nothing will
+# ever read again. Without this the table is the one part of the store that
+# only ever grows, in a product whose pitch is a single tidy file.
+TOMBSTONE_RETENTION_DAYS = 90
+
+PRUNE_TOMBSTONES = f"""
+DELETE FROM deleted_nodes
+WHERE deleted_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-{
+    TOMBSTONE_RETENTION_DAYS
+} days')
+"""
+
 # Needs the sqlite-vec extension loaded first, so it is applied separately.
 VECTOR_TABLE = """
 CREATE VIRTUAL TABLE IF NOT EXISTS node_vectors USING vec0(
