@@ -106,9 +106,12 @@ export function RoadmapView({ view }: { view: "path" | "board" }) {
       <StatusOverlay
         loading={loading}
         error={error}
-        // Not "no memories" — a graph full of notes and no work is a perfectly
-        // ordinary state, and the board says so itself.
-        empty={false}
+        // An empty store is the same problem on every view, so it gets the
+        // same answer: connect an agent. A graph full of notes with nothing
+        // carrying a status is a different fact entirely — perfectly ordinary,
+        // and the board and path say so themselves rather than sending anyone
+        // back to installation instructions they have already followed.
+        empty={data.nodes.length === 0}
         onRetry={() => window.location.reload()}
       />
     </main>

@@ -53,6 +53,12 @@ synapsse/
 
 ## Quickstart
 
+Clone it:
+
+```bash
+git clone https://github.com/miforever/synapsse.git && cd synapsse
+```
+
 Docker — brings up both services:
 
 ```bash
@@ -104,6 +110,56 @@ Or commit it to the project by writing `.mcp.json`:
 
 Then ask the agent to remember something. The node appears on the canvas as it
 is written, with no refresh.
+
+### What the agent is told
+
+A memory store is only worth what its shape is worth, and an agent left to
+guess writes long unlinked notes and invents a class per noun. So the daemon
+tells it how the graph is meant to be built, in the MCP `initialize` handshake
+before any tool is called — the conventions travel with the server rather than
+living in each user's project, so every client works to the same ones without
+anyone copying a file around.
+
+The gist, in full at `backend/app/mcp/guidance.py`:
+
+- Search before writing; correct a memory rather than contradicting it.
+- A **class** is the shape, **tags** are the specifics. A girlfriend is a
+  `person` tagged `girlfriend`, not a class of her own.
+- One memory, one thing. A problem and its fix are two, joined by an edge — so
+  the fix can also be linked to the other problems it solved.
+- Connect what you write. An unlinked memory is nearly unreachable, and the
+  link across topics is the one nobody thinks to record.
+- Read outside in: index, then one node, then outward.
+
+Two prompts come with it, for when the shape matters enough to ask for it
+deliberately: **`remember`** captures something with the right structure, and
+**`recall`** answers a question while reading as little of the graph as it can.
+
+### Remembering without being asked
+
+A user who has to notice that something is worth keeping, and then say so, is
+doing the job this server exists to do for them — and by the time they think to
+ask, the session where it mattered is over. So the instructions tell agents to
+write as they work: when a preference is stated, a decision made, a person
+learned about, a problem diagnosed or fixed. And to search here before asking a
+question the user has already answered.
+
+Be aware of what that guarantee is worth. MCP gives a server no way to make a
+client do anything — instructions are advisory, they land in the model's
+context, and how strongly a given client weighs them varies. In practice they
+work well and are the right default, but if capture matters to you, add the
+same expectation somewhere your client treats as binding. For Claude Code, in
+`CLAUDE.md`:
+
+```markdown
+## Memory
+Record to SYNAPSSE as you work, without being asked — preferences, decisions
+and their reasons, people, and problems with what fixed them. Search it before
+asking me something I may have already answered.
+```
+
+Belt and braces, for the same reason a reminder written in two places gets
+read.
 
 ## Memory model
 
@@ -190,9 +246,10 @@ Exposed over MCP:
 
 | Tool                                          | Purpose                                                  |
 | --------------------------------------------- | -------------------------------------------------------- |
-| `search_index(query, limit)`                  | Hybrid keyword + semantic search, lightweight candidates  |
+| `search_index(query, limit, mode)`            | Hybrid keyword + semantic search, lightweight candidates  |
 | `read_node(node_id)`                          | Full content and immediate connections                    |
 | `traverse_graph(node_id, depth)`              | Local structural map N hops out                           |
+| `find_path(source_id, target_id, max_depth)`  | How two memories are connected, by the shortest route     |
 | `add_memory(...)`                             | Persist a node, its tags, edges, files and sources        |
 | `update_memory(...)`                          | Correct a memory; omitted fields stay untouched           |
 | `delete_memory(node_id)`                      | Remove a memory and every edge touching it                |
@@ -213,6 +270,14 @@ note about the canvas never stuttering.
 The two rankings are merged with reciprocal rank fusion, which needs no shared
 scale between a keyword rank and a cosine distance, and rewards memories both
 engines agree on.
+
+Fusion is the default, not the only option. Quote part of a query and that
+phrase is required verbatim; pass `mode=keyword` and the semantic half is
+dropped entirely, leaving the full-text ranking exactly as SQLite ordered it.
+Both exist for the same reason: when you are after a literal string — a file
+name, an identifier, an error message — a memory that merely means something
+similar is noise. Keyword mode also answers before the embedding model has
+been downloaded, since nothing is embedded.
 
 Embeddings run locally: `intfloat/multilingual-e5-large` as ONNX on the CPU. It
 is fetched once and then works offline — memory content is never sent
@@ -285,6 +350,24 @@ npx playwright test        # needs the daemon and canvas running
 CI runs the same checks and builds both images on every push and pull request
 to `main` and `develop`.
 
+## Running it on another machine
+
+The daemon binds `127.0.0.1` and has **no authentication**. That default is
+load-bearing: anything that can reach the port can read and rewrite every
+memory, and `attach_file` takes a path on the host, so an open port is also a
+way to copy files off that machine.
+
+To use one memory from several of your own devices, do not change `host` and
+open the port. Put the machines on a private network instead:
+
+- **Tailscale** (or any WireGuard mesh) — install it on both, and the daemon is
+  reachable at the host's private address, visible only to your devices.
+- **SSH tunnel** — `ssh -N -L 8000:127.0.0.1:8000 you@host`, then point the
+  agent at `http://localhost:8000/mcp` as usual.
+
+Authentication is worth building before this is a documented feature rather
+than a workaround; until it exists, the network is doing the access control.
+
 ## Privacy
 
 Everything stays on your machine — one SQLite file, a directory of attachments,
@@ -317,7 +400,7 @@ and public institutions. You may read it, run it, change it and share your
 changes, provided the notices travel with it.
 
 Commercial use is not granted by this licence. If you want it for a business,
-open an issue.
+[open an issue](https://github.com/miforever/synapsse/issues).
 
 Note on wording: this is **source-available**, not open source in the OSI
 sense — the definition does not permit a restriction on the field of use. It

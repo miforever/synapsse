@@ -1,33 +1,236 @@
 "use client";
 
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useState } from "react";
 
+import { setAuthToken } from "@/lib/api";
 import { Logo } from "./Logo";
 
-const MCP_COMMAND = "claude mcp add --transport http synapsse http://localhost:8000/mcp";
+const MCP_URL = "http://localhost:8000/mcp";
 
-function CopyableCommand({ command }: { command: string }) {
+/*
+ * Colour carries one meaning each in this panel, which is the whole reason it
+ * is readable at a glance:
+ *
+ *   emerald — the system is alive. Nothing else is ever emerald.
+ *   violet  — structure and sequence: the rail, the step markers.
+ *   cyan    — things you copy and run. Nothing decorative is cyan.
+ *
+ * The earlier version used cyan for all three, which left it meaning "this is
+ * a bit important" — a colour saying that about four different things at once
+ * is saying nothing.
+ */
+
+/**
+ * How to connect, per client.
+ *
+ * Kept as data rather than markup because the list only grows, and because
+ * every one of these is a thing a user has to type exactly right — the key
+ * name differs per client and a wrong one fails silently, with the server
+ * simply never appearing. Each entry says where the config lives, since "add
+ * it to your MCP settings" is the instruction people are already stuck on.
+ */
+const CLIENTS = [
+  {
+    id: "ask",
+    name: "Just ask it",
+    where: "Paste into the agent's chat — it will do the rest",
+    code: `Add an MCP server named "synapsse" at ${MCP_URL}, using streamable HTTP transport. Then list its tools so we can confirm it connected.`,
+    note: "Most agents can edit their own MCP config. The tabs beside this one are for when yours cannot, or when you would rather do it yourself",
+  },
+  {
+    id: "claude",
+    name: "Claude Code",
+    where: "One command, from anywhere",
+    code: `claude mcp add --transport http synapsse ${MCP_URL}`,
+    note: "Or commit the same server to a project in .mcp.json",
+  },
+  {
+    id: "cursor",
+    name: "Cursor",
+    where: "~/.cursor/mcp.json",
+    code: `{
+  "mcpServers": {
+    "synapsse": { "url": "${MCP_URL}" }
+  }
+}`,
+    note: "Or .cursor/mcp.json, to keep it to one project",
+  },
+  {
+    id: "gemini",
+    name: "Gemini CLI",
+    where: "~/.gemini/settings.json",
+    code: `{
+  "mcpServers": {
+    "synapsse": { "httpUrl": "${MCP_URL}" }
+  }
+}`,
+    note: "The key is httpUrl — that is what Gemini CLI uses for HTTP servers",
+  },
+  {
+    id: "antigravity",
+    name: "Antigravity",
+    where: "~/.gemini/config/mcp_config.json",
+    code: `{
+  "mcpServers": {
+    "synapsse": { "serverUrl": "${MCP_URL}" }
+  }
+}`,
+    note: "In the IDE: Manage MCP Servers → View raw config. The key is serverUrl",
+  },
+] as const;
+
+const TRIGGERS = [
+  "You state a preference, or correct how it did something",
+  "A decision is made, with a reason worth keeping",
+  "It learns something durable about a person or client",
+  "A problem is diagnosed — and again when something fixes it",
+];
+
+const EASE = [0.22, 1, 0.36, 1] as const;
+
+/** The two-sheets copy glyph, and the tick that replaces it on success. */
+function CopyIcon({ copied }: { copied: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-3.5 w-3.5"
+      aria-hidden="true"
+    >
+      {copied ? (
+        <path d="M20 6 9 17l-5-5" />
+      ) : (
+        <>
+          <rect x="9" y="9" width="13" height="13" rx="2" />
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+        </>
+      )}
+    </svg>
+  );
+}
+
+function CopyBlock({ code }: { code: string }) {
   const [copied, setCopied] = useState(false);
 
   return (
-    <button
-      type="button"
-      onClick={() => {
-        void navigator.clipboard?.writeText(command).then(() => {
-          setCopied(true);
-          setTimeout(() => setCopied(false), 1600);
-        });
-      }}
-      title="Copy to clipboard"
-      className="group mt-3 flex w-full items-center gap-2 rounded-lg border border-line/[.12] bg-elevated/10 px-3 py-2 text-left transition hover:border-cyan/30"
-    >
-      <code className="min-w-0 flex-1 truncate font-mono text-[10px] text-cyan">
-        {command}
-      </code>
-      <span className="shrink-0 font-mono text-[9px] uppercase tracking-widest text-faint group-hover:text-muted">
-        {copied ? "copied" : "copy"}
+    <div className="group/copy relative mt-2.5">
+      {/* Wrapped and never truncated: a command you cannot read whole is a
+          command you cannot trust, and this is the first thing anyone runs. */}
+      <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-lg border border-line/[.1] bg-canvas/40 py-3 pl-3.5 pr-11 font-mono text-xs leading-relaxed text-cyan">
+        {code}
+      </pre>
+      <button
+        type="button"
+        onClick={() => {
+          void navigator.clipboard?.writeText(code).then(() => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1600);
+          });
+        }}
+        aria-label={copied ? "Copied" : "Copy to clipboard"}
+        title={copied ? "Copied" : "Copy"}
+        className={`absolute right-2 top-2 rounded-md p-1.5 transition ${
+          copied
+            ? "text-emerald-300"
+            : "text-faint/70 hover:bg-elevated/10 hover:text-strong"
+        }`}
+      >
+        <CopyIcon copied={copied} />
+      </button>
+    </div>
+  );
+}
+
+function ConnectPanel() {
+  const [active, setActive] = useState<string>(CLIENTS[0].id);
+  const reduced = useReducedMotion();
+  const client = CLIENTS.find((entry) => entry.id === active) ?? CLIENTS[0];
+
+  return (
+    <div className="mt-3.5 overflow-hidden rounded-xl border border-line/[.1] bg-elevated/[.03]">
+      {/* A segmented control rather than four loose pills: one indicator that
+          moves reads as a single choice, where four independent buttons
+          lighting up read as four independent switches. */}
+      <div
+        role="tablist"
+        aria-label="MCP client"
+        className="flex flex-wrap gap-0.5 border-b border-line/[.08] p-1.5"
+      >
+        {CLIENTS.map((entry) => {
+          const selected = entry.id === active;
+          return (
+            <button
+              key={entry.id}
+              role="tab"
+              aria-selected={selected}
+              type="button"
+              onClick={() => setActive(entry.id)}
+              className={`relative rounded-md px-3 py-1.5 text-xs transition-colors ${
+                selected ? "text-strong" : "text-faint hover:text-muted"
+              }`}
+            >
+              {selected && (
+                <motion.span
+                  layoutId="client-tab"
+                  className="absolute inset-0 rounded-md border border-line/[.14] bg-elevated/[.12]"
+                  transition={
+                    reduced
+                      ? { duration: 0 }
+                      : { type: "spring", stiffness: 420, damping: 34 }
+                  }
+                />
+              )}
+              <span className="relative">{entry.name}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="p-3.5">
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={client.id}
+            initial={reduced ? false : { opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={reduced ? undefined : { opacity: 0, y: -6 }}
+            transition={{ duration: 0.22, ease: EASE }}
+          >
+            <p className="font-mono text-[11px] text-muted">{client.where}</p>
+            <CopyBlock code={client.code} />
+            <p className="mt-2 text-[11px] leading-relaxed text-faint">
+              {client.note}
+            </p>
+          </motion.div>
+        </AnimatePresence>
+      </div>
+    </div>
+  );
+}
+
+function Step({
+  n,
+  title,
+  children,
+}: {
+  n: string;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <li className="relative pl-11">
+      {/* Sits on the rail and hides the line behind it, so the marker reads as
+          a station on the sequence rather than a badge floating over it. */}
+      <span className="absolute left-0 top-0 flex h-7 w-7 items-center justify-center rounded-full border border-violet/40 bg-raised font-mono text-[10px] text-violet">
+        {n}
       </span>
-    </button>
+      <h3 className="pt-1 text-sm font-medium text-strong">{title}</h3>
+      {children}
+    </li>
   );
 }
 
@@ -36,7 +239,8 @@ function CopyableCommand({ command }: { command: string }) {
  *
  * An empty canvas with no explanation is the worst possible first run, so this
  * distinguishes "still loading" from "daemon unreachable" from "connected but
- * empty" — and in the last case says exactly how to connect an agent.
+ * empty" — and in the last case walks through connecting an agent, which is
+ * the only thing standing between here and a graph.
  */
 export function StatusOverlay({
   loading,
@@ -49,66 +253,200 @@ export function StatusOverlay({
   empty: boolean;
   onRetry: () => void;
 }) {
+  const reduced = useReducedMotion();
+  const [token, setToken] = useState("");
+
+  // A locked daemon is not an unreachable one, and telling someone to go start
+  // a daemon that is already running wastes their afternoon.
+  const locked = error === "This daemon needs a token";
+
   if (!loading && !error && !empty) return null;
 
+  // One orchestrated entrance rather than several things arriving separately:
+  // the panel settles, then its contents follow it in reading order.
+  const container = {
+    hidden: {},
+    show: { transition: { staggerChildren: reduced ? 0 : 0.055, delayChildren: 0.05 } },
+  };
+  const item = reduced
+    ? { hidden: {}, show: {} }
+    : {
+        hidden: { opacity: 0, y: 12 },
+        show: { opacity: 1, y: 0, transition: { duration: 0.5, ease: EASE } },
+      };
+
   return (
-    <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center p-6">
-      <div className="glass-panel pointer-events-auto w-full max-w-md rounded-xl p-8">
-        <Logo size={40} />
+    // pt clears the control bar: this panel is taller than the viewport on a
+    // laptop, so it starts at the top rather than centred, and centring padding
+    // alone would slide it under the navigation.
+    <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center overflow-y-auto px-6 pb-10 pt-24 sm:px-10 sm:pb-14 sm:pt-28">
+      <motion.div
+        variants={container}
+        initial="hidden"
+        animate="show"
+        className="glass-panel pointer-events-auto relative my-auto w-full max-w-2xl overflow-hidden rounded-2xl p-8 sm:p-10"
+      >
+        {/* A single wash of brand colour bleeding in from the top corner, so
+            the panel has a light source instead of being a flat rectangle. */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -right-24 -top-32 h-64 w-64 rounded-full bg-violet/10 blur-3xl"
+        />
+
+        <motion.div variants={item} className="relative">
+          <Logo size={52} />
+        </motion.div>
 
         {loading && (
-          <p className="mt-6 flex items-center gap-2 font-mono text-[11px] text-muted">
+          <motion.p
+            variants={item}
+            className="relative mt-8 flex items-center gap-2 font-mono text-xs text-muted"
+          >
             <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan" />
             Loading the graph…
-          </p>
+          </motion.p>
         )}
 
-        {!loading && error && (
-          <>
-            <p className="mt-6 text-sm text-muted">
+        {!loading && locked && (
+          <div className="relative">
+            <motion.p variants={item} className="mt-8 text-2xl text-strong">
+              This memory is locked.
+            </motion.p>
+            <motion.p
+              variants={item}
+              className="mt-2.5 max-w-prose text-sm leading-relaxed text-muted"
+            >
+              The daemon was started with a token, so it will not answer
+              without one. Paste it here — it is kept in this browser only.
+            </motion.p>
+            <motion.form
+              variants={item}
+              className="mt-5 flex flex-wrap gap-2"
+              onSubmit={(event) => {
+                event.preventDefault();
+                setAuthToken(token.trim());
+                window.location.reload();
+              }}
+            >
+              <input
+                type="password"
+                value={token}
+                onChange={(event) => setToken(event.target.value)}
+                placeholder="SYNAPSSE_AUTH_TOKEN"
+                aria-label="Access token"
+                className="min-w-0 flex-1 rounded-lg border border-line/[.14] bg-elevated/10 px-3 py-2 font-mono text-xs text-strong placeholder:text-faint/60 focus:border-cyan/40 focus:outline-none"
+              />
+              <button
+                type="submit"
+                className="rounded-lg bg-strong px-4 py-2 text-sm font-medium text-canvas transition hover:opacity-90"
+              >
+                Unlock
+              </button>
+            </motion.form>
+          </div>
+        )}
+
+        {!loading && error && !locked && (
+          <div className="relative">
+            <motion.p variants={item} className="mt-8 text-2xl text-strong">
               Cannot reach the daemon.
-            </p>
-            <p className="mt-1 font-mono text-[10px] text-faint">{error}</p>
-            <p className="mt-3 text-xs text-muted">
+            </motion.p>
+            <motion.p
+              variants={item}
+              className="mt-2 font-mono text-[11px] text-faint"
+            >
+              {error}
+            </motion.p>
+            <motion.p
+              variants={item}
+              className="mt-3 text-sm leading-relaxed text-muted"
+            >
               Start it with{" "}
               <code className="font-mono text-cyan">
                 uv run uvicorn app.main:app
               </code>{" "}
-              from <code className="font-mono text-muted">backend/</code>,
-              or bring up the Docker stack.
-            </p>
-            <button
-              type="button"
-              onClick={onRetry}
-              className="mt-4 rounded-lg border border-line/20 px-3 py-1.5 font-mono text-[10px] uppercase tracking-widest text-muted transition hover:border-cyan/40 hover:text-strong"
-            >
-              Retry
-            </button>
-          </>
+              from <code className="font-mono text-muted">backend/</code>, or
+              bring up the Docker stack.
+            </motion.p>
+            <motion.div variants={item}>
+              <button
+                type="button"
+                onClick={onRetry}
+                className="mt-5 rounded-lg border border-line/20 px-4 py-2 font-mono text-[11px] uppercase tracking-widest text-muted transition hover:border-cyan/40 hover:text-strong"
+              >
+                Retry
+              </button>
+            </motion.div>
+          </div>
         )}
 
         {!loading && !error && empty && (
-          <>
-            <p className="mt-6 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.2em] text-emerald-300/90">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-              Everything is running
-            </p>
-            <p className="mt-3 text-sm text-muted">
-              You have no memories yet.
-            </p>
-            <p className="mt-2 text-xs leading-relaxed text-muted">
-              The daemon is up and the canvas is talking to it — there is
-              simply nothing in the graph. Connect an agent, then ask it to
-              remember something. Memories appear here as they are written,
-              with no refresh.
-            </p>
-            <CopyableCommand command={MCP_COMMAND} />
-            <p className="mt-2 font-mono text-[10px] text-faint/70">
-              Cursor: add the same URL to ~/.cursor/mcp.json
-            </p>
-          </>
+          <div className="relative">
+            <motion.p
+              variants={item}
+              className="mt-7 inline-flex items-center gap-2 rounded-full border border-emerald-400/25 bg-emerald-400/[.07] px-3 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-emerald-300/90"
+            >
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
+              Daemon up · canvas connected
+            </motion.p>
+
+            <motion.h2
+              variants={item}
+              className="mt-4 text-[1.65rem] leading-tight tracking-tight text-strong"
+            >
+              Nothing to show yet.
+            </motion.h2>
+
+            <motion.p
+              variants={item}
+              className="mt-2.5 max-w-prose text-sm leading-relaxed text-muted"
+            >
+              The graph is empty because nothing has written to it. Point an
+              agent at the daemon and it will keep what it learns as it works —
+              memories appear here the moment they are written, with no refresh.
+            </motion.p>
+
+            <motion.ol variants={item} className="relative mt-9 space-y-9">
+              {/* The rail. It fades out below the last marker rather than
+                  stopping flat, because the sequence does not end at step two
+                  — that is where the ordinary work begins. */}
+              <span
+                aria-hidden
+                className="absolute bottom-4 left-[13px] top-4 w-px bg-gradient-to-b from-violet/45 via-violet/20 to-transparent"
+              />
+
+              <Step n="1" title="Connect your agent">
+                <ConnectPanel />
+              </Step>
+
+              <Step n="2" title="Then just work">
+                <p className="mt-1.5 text-sm leading-relaxed text-muted">
+                  You should not have to ask. The daemon tells every agent that
+                  connects to record as it goes, and to search here before
+                  asking you something you have already answered.
+                </p>
+
+                <ul className="mt-3.5 grid gap-x-5 gap-y-2 sm:grid-cols-2">
+                  {TRIGGERS.map((trigger) => (
+                    <li
+                      key={trigger}
+                      className="flex gap-2.5 text-[11px] leading-relaxed text-muted"
+                    >
+                      <span className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-violet/70" />
+                      {trigger}
+                    </li>
+                  ))}
+                </ul>
+
+                <p className="mt-4 text-[11px] leading-relaxed text-faint">
+                  You can still say “remember this” to be certain of something.
+                  The point is not having to.
+                </p>
+              </Step>
+            </motion.ol>
+          </div>
         )}
-      </div>
+      </motion.div>
     </div>
   );
 }
