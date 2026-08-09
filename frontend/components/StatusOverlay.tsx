@@ -88,12 +88,18 @@ const CLIENTS = [
  * in. Left to itself no agent installs the recall hook, because nothing in the
  * MCP handshake mentions one. And nothing tells the user why a freshly added
  * server appears broken until the client restarts.
+ *
+ * Deliberately names no client and quotes no command. Sitting under tabs that
+ * each name one, a Claude Code flag in here read as though the paste only
+ * worked there. What got the scope right was stating the requirement — every
+ * project, widest scope available — not supplying the exact flag, and a
+ * requirement is something any assistant can carry out in its own config.
  */
 const SELF_SETUP_PROMPT = `Set up SYNAPSSE, my local memory graph, and use it from now on.
 
-1. Add an MCP server named "synapsse" at ${MCP_URL} using streamable HTTP transport. Register it globally, for every project, not only the one we are in. (In Claude Code: claude mcp add --scope user --transport http synapsse ${MCP_URL})
-2. If you support hooks, make recall automatic: register hooks/synapsse_recall.py from the synapsse folder as a hook that runs on every message I send, added alongside any hooks already configured rather than replacing them. (In Claude Code: a UserPromptSubmit command hook in ~/.claude/settings.json running python3 /full/path/to/synapsse/hooks/synapsse_recall.py.) Ask me for the path if you cannot find the folder.
-3. Then tell me plainly what I have to do myself before either takes effect — the client restart that attaches the MCP tools, and the settings reload that picks up the hook.`;
+1. Add an MCP server named "synapsse" at ${MCP_URL} using streamable HTTP transport. Register it for every project rather than only the one we are in — use the widest scope your configuration offers.
+2. If you support hooks that run on every message I send, make recall automatic: register hooks/synapsse_recall.py from the synapsse folder as one, alongside any hooks already configured rather than replacing them. Ask me where the folder is if you cannot find it.
+3. Then tell me plainly what I have to do myself before either takes effect — the restart that attaches the MCP tools, and the reload that picks up the hook.`;
 
 const TRIGGERS = [
   "You state a preference, or correct how it did something",
