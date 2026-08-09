@@ -46,8 +46,8 @@ const CLIENTS = [
     code: `Set up SYNAPSSE, my local memory graph, and use it from now on.
 
 1. Add an MCP server named "synapsse" at ${MCP_URL} using streamable HTTP transport. Register it globally, for every project, not only this one — in Claude Code that is: claude mcp add --scope user --transport http synapsse ${MCP_URL}
-2. If you support hooks, make recall automatic: register hooks/synapsse_recall.py from the synapsse folder as a UserPromptSubmit hook. In Claude Code that is a command hook in ~/.claude/settings.json running: python3 /full/path/to/synapsse/hooks/synapsse_recall.py — ask me for the path if you cannot find the folder.
-3. List the server tools to confirm it connected, and tell me whether I need to restart for either change to take effect.`,
+2. If you support hooks, make recall automatic: register hooks/synapsse_recall.py from the synapsse folder as a UserPromptSubmit hook. In Claude Code that is a command hook in ~/.claude/settings.json, added alongside any hooks already there rather than replacing them, running: python3 /full/path/to/synapsse/hooks/synapsse_recall.py — ask me for the path if you cannot find the folder.
+3. Tell me plainly what I have to do myself before either works: MCP tools attach when a session starts, so I need to restart the client (claude --continue keeps this conversation), and a newly added hook needs /hooks opened once, or a restart, before it is read.`,
     note: "Most agents can edit their own MCP config and settings. The tabs beside this one are for when yours cannot, or when you would rather do it yourself",
   },
   {

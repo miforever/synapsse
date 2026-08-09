@@ -90,8 +90,12 @@ With the daemon running, point any MCP client at `http://localhost:8000/mcp`.
 **Claude Code** — one command:
 
 ```bash
-claude mcp add --transport http synapsse http://localhost:8000/mcp
+claude mcp add --scope user --transport http synapsse http://localhost:8000/mcp
 ```
+
+`--scope user` is the part worth not skipping. Without it the server is
+registered for the directory the command happened to run in, and a memory meant
+to follow you between projects is reachable from exactly one of them.
 
 Or commit it to the project by writing `.mcp.json`:
 
@@ -108,8 +112,15 @@ Or commit it to the project by writing `.mcp.json`:
 
 **Cursor** — add the same block to `~/.cursor/mcp.json`.
 
-Then ask the agent to remember something. The node appears on the canvas as it
-is written, with no refresh.
+**Then restart the client.** MCP servers are connected once, when a session
+starts, so the session that registered the server does not have its tools —
+they attach to the next one. An agent that says it cannot see SYNAPSSE
+immediately after adding it is not misconfigured, it just has not been
+restarted. In Claude Code, `claude --continue` picks the conversation back up
+where it was.
+
+After that, ask the agent to remember something. The node appears on the canvas
+as it is written, with no refresh.
 
 ### What the agent is told
 
@@ -191,6 +202,11 @@ For Claude Code, in `~/.claude/settings.json`:
   }
 }
 ```
+
+Open `/hooks` once afterwards, or restart, so the settings are re-read — a hook
+added mid-session is not always picked up by the running one. You will know it
+works when memories appear above the reply without anything having called a
+tool.
 
 It needs nothing outside the standard library, adds about 130ms to a message,
 and is written so that every failure — daemon down, still loading, answering
