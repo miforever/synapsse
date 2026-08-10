@@ -1,7 +1,7 @@
 import aiosqlite
 import pytest
 
-from app.core.fields import FALLBACK_CLASS
+from app.core.fields import FALLBACK_CLASS, NODE_CLASSES
 from app.core.slug import slugify
 from app.memories.models import NodeCreate
 from app.memories.nodes import create_node, get_node
@@ -22,8 +22,8 @@ def test_slugify_rejects_empty() -> None:
 
 
 async def test_default_types_are_seeded(conn: aiosqlite.Connection) -> None:
-    names = set(await list_types(conn))
-    assert {"person", "project", "idea", "fact", "object", "place"} <= names
+    """Every class in the set, and nothing else."""
+    assert set(await list_types(conn)) == set(NODE_CLASSES)
 
 
 async def test_unknown_class_is_kept_as_a_tag(conn: aiosqlite.Connection) -> None:
@@ -74,7 +74,7 @@ async def test_find_nodes_by_tag(conn: aiosqlite.Connection) -> None:
     node = await create_node(
         conn, NodeCreate(type="plan", title="P", summary="s", tags=["roadmap"])
     )
-    await create_node(conn, NodeCreate(type="fact", title="F", summary="s"))
+    await create_node(conn, NodeCreate(type="finding", title="F", summary="s"))
 
     assert await find_nodes_by_tag(conn, "roadmap") == [node.id]
 

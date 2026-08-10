@@ -66,13 +66,15 @@ async def init_db(db_path: str | None = None) -> aiosqlite.Connection:
         await conn.execute(pragma)
     await conn.executescript(SCHEMA)
     await _apply_additions(conn)
-    for rewrite in REWRITES:
-        await conn.execute(rewrite)
 
     if await _load_vector_extension(conn):
         await conn.executescript(VECTOR_TABLE.format(dim=settings.embedding_dim))
         vectors.mark_available(conn)
     await conn.executemany(SEED_TYPES_SQL, [(name,) for name in DEFAULT_NODE_TYPES])
+    # After the seed, never before: moving a memory onto its new class needs
+    # that class to exist, and the foreign key is checked as the row is written.
+    for rewrite in REWRITES:
+        await conn.execute(rewrite)
     await conn.execute(PRUNE_TOMBSTONES)
     await conn.commit()
     return conn

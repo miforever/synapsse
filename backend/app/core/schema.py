@@ -211,6 +211,17 @@ REWRITES: tuple[str, ...] = (
         relation_type = 'depends_on'
     WHERE relation_type = 'blocks'
     """,
+    # Two classes that sat a tier above their siblings. `fact` could be said of
+    # any preference or decision, so it collected everything ambiguous;
+    # `resource` split content from `document` on whether it was made of atoms,
+    # which is not a distinction anybody searches on.
+    #
+    # The memories are moved and the old class row dropped, rather than the row
+    # being renamed. Renaming is one statement fewer and breaks the moment both
+    # names exist at once — a merge has to be a merge.
+    "UPDATE nodes SET type = 'finding' WHERE type = 'fact'",
+    "UPDATE nodes SET type = 'document' WHERE type = 'resource'",
+    "DELETE FROM node_types WHERE name IN ('fact', 'resource')",
 )
 
 # A client that has not asked what changed in ninety days is reloading from

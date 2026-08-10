@@ -5,14 +5,32 @@ copy of a fact, an edge that says nothing, a row nobody has wanted since it was
 written. Nothing here fails loudly in production, which is why it is tested.
 """
 
+from contextlib import asynccontextmanager
+
 import aiosqlite
 import pytest
 
 from app.core.database import init_db
 from app.memories import duplicates
+from app.memories import types as types_service
 from app.memories.models import NodeCreate
 from app.memories.nodes import create_node, list_stale, mark_read
 from app.memories.tools import add_memory, link_memories, read_node, stale_memories
+
+
+@asynccontextmanager
+async def opened(path: str):
+    """A database that closes even when the test inside fails.
+
+    Without this a failing assertion leaves the connection holding the file's
+    WAL lock, and the next init_db on that path waits on it forever — the whole
+    suite hangs, and the hang says nothing about which test broke.
+    """
+    conn = await init_db(path)
+    try:
+        yield conn
+    finally:
+        await conn.close()
 
 
 @pytest.fixture
@@ -85,7 +103,7 @@ async def test_links_carry_the_relation_they_were_given(
     )
     written = await add_memory(
         title="Close the class set",
-        summary="Thirteen classes, and a word that is not one becomes a tag",
+        summary="Sixteen classes, and a word that is not one becomes a tag",
         content="body",
         type="decision",
         linked_to=[{"id": project.id, "relation": "part_of"}],
@@ -102,7 +120,7 @@ async def test_a_bare_id_still_links(live_db: aiosqlite.Connection) -> None:
         title="Loose link",
         summary="joined without naming a relation",
         content="body",
-        type="fact",
+        type="finding",
         linked_to=[project.id],
     )
     assert written["edges"][0]["relation_type"] == "relates_to"
@@ -118,7 +136,7 @@ async def test_an_invented_relation_is_refused(
         title="Bad",
         summary="names a relation that does not exist",
         content="body",
-        type="fact",
+        type="finding",
         linked_to=[{"id": project.id, "relation": "blocks"}],
     )
     assert result["written"] is False
@@ -141,7 +159,7 @@ async def test_reading_a_memory_takes_it_off_the_stale_list(
     live_db: aiosqlite.Connection,
 ) -> None:
     node = await create_node(
-        conn=live_db, data=NodeCreate(type="fact", title="Old", summary="s")
+        conn=live_db, data=NodeCreate(type="finding", title="Old", summary="s")
     )
     # Backdate it past the window; nothing has read it yet.
     await live_db.execute(
@@ -160,7 +178,7 @@ async def test_mark_read_does_not_look_like_an_edit(
     conn: aiosqlite.Connection,
 ) -> None:
     """Reading must not bump updated_at, or every client re-fetches it."""
-    node = await create_node(conn, NodeCreate(type="fact", title="F", summary="s"))
+    node = await create_node(conn, NodeCreate(type="finding", title="F", summary="s"))
     await mark_read(conn, node.id)
 
     rows = await conn.execute_fetchall(
@@ -173,7 +191,7 @@ async def test_mark_read_does_not_look_like_an_edit(
 
 
 async def test_a_read_memory_is_never_stale(conn: aiosqlite.Connection) -> None:
-    node = await create_node(conn, NodeCreate(type="fact", title="F", summary="s"))
+    node = await create_node(conn, NodeCreate(type="finding", title="F", summary="s"))
     await mark_read(conn, node.id)
     assert await list_stale(conn, before="2999-01-01T00:00:00.000Z") == []
 
@@ -181,28 +199,59 @@ async def test_a_read_memory_is_never_stale(conn: aiosqlite.Connection) -> None:
 async def test_legacy_blocks_edges_are_turned_round(tmp_path) -> None:
     """blocks(A, B) is depends_on(B, A); the relationship survives the swap."""
     path = str(tmp_path / "legacy.db")
-    conn = await init_db(path)
-    for node_id in ("a", "b"):
+    async with opened(path) as conn:
+        for node_id in ("a", "b"):
+            await conn.execute(
+                "INSERT INTO nodes (id, type, title, summary) "
+                "VALUES (?, 'finding', ?, 's')",
+                (node_id, node_id),
+            )
+        # The old CHECK allowed `blocks`, so a legacy row goes straight in.
+        await conn.execute("DROP TABLE edges")
         await conn.execute(
-            "INSERT INTO nodes (id, type, title, summary) VALUES (?, 'fact', ?, 's')",
-            (node_id, node_id),
+            "CREATE TABLE edges (id TEXT PRIMARY KEY, source_id TEXT, "
+            "target_id TEXT, relation_type TEXT, weight REAL DEFAULT 1.0, "
+            "created_at TEXT)"
         )
-    # The old CHECK allowed `blocks`, so a legacy row is written straight in.
-    await conn.execute("DROP TABLE edges")
-    await conn.execute(
-        "CREATE TABLE edges (id TEXT PRIMARY KEY, source_id TEXT, target_id TEXT, "
-        "relation_type TEXT, weight REAL DEFAULT 1.0, created_at TEXT)"
-    )
-    await conn.execute(
-        "INSERT INTO edges (id, source_id, target_id, relation_type) "
-        "VALUES ('e', 'a', 'b', 'blocks')"
-    )
-    await conn.commit()
-    await conn.close()
+        await conn.execute(
+            "INSERT INTO edges (id, source_id, target_id, relation_type) "
+            "VALUES ('e', 'a', 'b', 'blocks')"
+        )
+        await conn.commit()
 
-    reopened = await init_db(path)
-    rows = await reopened.execute_fetchall("SELECT * FROM edges")
-    await reopened.close()
+    async with opened(path) as reopened:
+        rows = await reopened.execute_fetchall("SELECT * FROM edges")
 
     assert rows[0]["relation_type"] == "depends_on"
     assert (rows[0]["source_id"], rows[0]["target_id"]) == ("b", "a")
+
+
+async def test_retired_classes_carry_their_memories_across(tmp_path) -> None:
+    """`fact` became `finding` and `resource` became `document`.
+
+    The rename is applied to the class row, not to every node: nodes.type is
+    declared ON UPDATE CASCADE, so a store written before the split follows its
+    memories across without touching them one by one.
+    """
+    path = str(tmp_path / "old.db")
+    async with opened(path) as conn:
+        # Put the retired names back, as a store written before the split has.
+        await conn.execute("INSERT OR IGNORE INTO node_types (name) VALUES ('fact')")
+        await conn.execute(
+            "INSERT OR IGNORE INTO node_types (name) VALUES ('resource')"
+        )
+        await conn.execute(
+            "INSERT INTO nodes (id, type, title, summary) VALUES ('n1','fact','F','s')"
+        )
+        await conn.execute(
+            "INSERT INTO nodes (id, type, title, summary) "
+            "VALUES ('n2','resource','R','s')"
+        )
+        await conn.commit()
+
+    async with opened(path) as reopened:
+        rows = await reopened.execute_fetchall("SELECT id, type FROM nodes ORDER BY id")
+        classes = set(await types_service.list_types(reopened))
+
+    assert [row["type"] for row in rows] == ["finding", "document"]
+    assert {"fact", "resource"} & classes == set()

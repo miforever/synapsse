@@ -16,7 +16,7 @@ async def test_snapshot_projects_nodes_and_links(conn: aiosqlite.Connection) -> 
     a = await create_node(
         conn, NodeCreate(type="idea", title="A", summary="s", tags=["x", "y"])
     )
-    b = await create_node(conn, NodeCreate(type="fact", title="B", summary="s"))
+    b = await create_node(conn, NodeCreate(type="finding", title="B", summary="s"))
     await create_edge(
         conn,
         EdgeCreate(source_id=a.id, target_id=b.id, relation_type="depends_on"),

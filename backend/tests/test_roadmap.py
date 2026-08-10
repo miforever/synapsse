@@ -40,7 +40,7 @@ async def test_status_and_target_round_trip(conn: aiosqlite.Connection) -> None:
 async def test_most_memories_carry_no_status(conn: aiosqlite.Connection) -> None:
     """A fact is not "todo" — the columns stay empty unless work is meant."""
     node = await create_node(
-        conn, NodeCreate(type="fact", title="Sky is blue", summary="s")
+        conn, NodeCreate(type="finding", title="Sky is blue", summary="s")
     )
     assert node.status is None
     assert node.target_date is None
@@ -86,7 +86,7 @@ async def test_roadmap_puts_dated_work_first_and_in_order(
     await _plan(conn, "someday", "todo")
     await _plan(conn, "later", "todo", "2026-12-01")
     await _plan(conn, "sooner", "doing", "2026-09-01")
-    await create_node(conn, NodeCreate(type="fact", title="unrelated", summary="s"))
+    await create_node(conn, NodeCreate(type="finding", title="unrelated", summary="s"))
 
     roadmap = await list_roadmap(conn)
 

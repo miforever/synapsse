@@ -19,7 +19,7 @@ async def test_missing_ids_reports_only_the_absent(
     conn: aiosqlite.Connection,
 ) -> None:
     node = await create_node(
-        conn, NodeCreate(type="fact", title="Real", summary="exists")
+        conn, NodeCreate(type="finding", title="Real", summary="exists")
     )
     assert await missing_ids(conn, [node.id]) == []
     assert await missing_ids(conn, ["ghost", node.id]) == ["ghost"]
@@ -43,7 +43,7 @@ async def test_add_memory_writes_nothing_when_a_link_target_is_unknown(
         title="Orphan",
         summary="must not survive a failed link",
         content="body",
-        type="fact",
+        type="finding",
         linked_to=["no-such-node"],
     )
 
@@ -62,7 +62,7 @@ async def test_add_memory_still_writes_when_links_are_good(
         title="Linked",
         summary="joins something real",
         content="body",
-        type="fact",
+        type="finding",
         linked_to=[target.id],
     )
 
@@ -74,7 +74,7 @@ async def test_link_memories_rejects_unknown_ends(
     live_db: aiosqlite.Connection,
 ) -> None:
     node = await create_node(
-        conn=live_db, data=NodeCreate(type="fact", title="Only", summary="s")
+        conn=live_db, data=NodeCreate(type="finding", title="Only", summary="s")
     )
     result = await link_memories(node.id, "ghost")
     assert "ghost" in str(result["error"])

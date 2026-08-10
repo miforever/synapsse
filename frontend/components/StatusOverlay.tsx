@@ -110,6 +110,8 @@ const TRIGGERS = [
   "A decision is made, with a reason worth keeping",
   "It learns something durable about a person or client",
   "A problem is diagnosed — and again when something fixes it",
+  "A constraint surfaces that will still be true next week",
+  "You change your mind about something already decided",
 ];
 
 const EASE = [0.22, 1, 0.36, 1] as const;

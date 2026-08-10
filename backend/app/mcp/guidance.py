@@ -49,21 +49,32 @@ it later does not rewrite the history of the problem.
 
 ## Class and tags
 
-Every memory has one **class** from a fixed thirteen — `person`,
-`organization`, `place`, `object`, `project`, `plan`, `issue`, `event`, `idea`,
-`fact`, `decision`, `preference`, `resource` — and any number of **tags**,
-which are the specifics.
+Every memory has one **class** from a fixed sixteen, and any number of **tags**
+for the specifics.
+
+- `person` a human · `creature` a living thing that is not human
+- `organization` people acting as one body
+- `place` somewhere things are located
+- `object` an inanimate thing owned or handled · `device` a machine with state
+  that runs and breaks · `document` content you can point at, file or contract
+  or URL
+- `event` something that occurred, at a time
+- `project` sustained effort with a scope · `plan` an intention with an end
+  state · `issue` a problem in play
+- `decision` a choice and its reason · `preference` how someone wants things
+  done · `constraint` a rule that binds whether or not they like it ·
+  `finding` something learned, with evidence · `idea` a proposal not yet tested
 
 A girlfriend is a `person` tagged `girlfriend`. A recurring argument is an
 `issue` tagged with who it involves. A word that is not a class is kept as a
 tag and the write still succeeds, so nothing is lost by guessing — but a class
-that fits makes "show me every person" answerable, and the canvas colours nodes
-by it.
+that fits makes "show me every person" answerable, and the canvas colours by it.
 
-Where the boundaries blur: an `idea` is unproven, a `fact` is settled, a
-`decision` is a choice with a reason behind it. A `place` is somewhere you
-locate other things; an `object` is something owned or acted on — the garage is
-a place, the car in it is an object.
+Where the boundaries blur: an `idea` is untested, a `finding` is learned, a
+`decision` is chosen. A `preference` is what someone likes and a `constraint`
+is what they are bound by — do not file an obligation as a taste. A `place` is
+somewhere you locate other things, an `object` is something owned or handled:
+the garage is a place, the car in it is an object.
 
 ## Connect it to something
 

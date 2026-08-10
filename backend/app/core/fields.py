@@ -16,34 +16,48 @@ from app.core.slug import slugify
 # was asking for, and adding one becomes a deliberate release rather than an
 # improvisation at two in the morning.
 #
-# Kept coarse on purpose: a class is the *shape* of a thing and carries one
-# colour on the canvas. Anything specific about a particular memory is a tag.
+# Levelled on purpose, which is the part that took two attempts. Siblings must
+# not be able to swallow one another: `fact` could always be said of a
+# preference or a decision ("it is a fact that they prefer..."), so it was not
+# their sibling but their parent, and every ambiguous memory drifted up into it
+# until it held half the store. It is `finding` now — something learned, with
+# evidence — which is a peer of `decision` rather than a roof over it.
+#
+# `person` and `creature` set the granularity. Anything broader than those two
+# is a family, not a class, and belongs split.
 NODE_CLASSES: tuple[str, ...] = (
-    # Entities
+    # Beings
     "person",
+    "creature",
+    # Groups
     "organization",
+    # Places
     "place",
+    # Things
     "object",
+    "device",
+    "document",
+    # Happenings
+    "event",
     # Work
     "project",
     "plan",
     "issue",
-    "event",
-    # Knowledge
-    "idea",
-    "fact",
+    # Positions held
     "decision",
     "preference",
-    "resource",
+    "constraint",
+    "finding",
+    "idea",
 )
 
 # Where an unrecognised class lands.
 #
-# `fact` because it claims the least. The word the agent reached for is kept as
-# a tag, so nothing it meant is lost and the memory stays findable by it — the
-# guess that would be worse than useless is silently filing a person under
-# something confident and wrong.
-FALLBACK_CLASS = "fact"
+# `finding` because it claims the least about shape while still being true: the
+# agent learned something. The word it reached for is kept as a tag, so nothing
+# it meant is lost — the guess that would be worse than useless is silently
+# filing a person under something confident and wrong.
+FALLBACK_CLASS = "finding"
 
 NodeType = Annotated[str, BeforeValidator(slugify), Field(max_length=40)]
 TagName = Annotated[str, BeforeValidator(slugify), Field(max_length=40)]

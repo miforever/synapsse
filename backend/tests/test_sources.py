@@ -16,7 +16,9 @@ from app.memories.nodes import create_node, delete_node, get_node
 
 
 async def _memory(conn: aiosqlite.Connection) -> str:
-    node = await create_node(conn, NodeCreate(type="fact", title="Claim", summary="s"))
+    node = await create_node(
+        conn, NodeCreate(type="finding", title="Claim", summary="s")
+    )
     return node.id
 
 
