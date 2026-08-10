@@ -3,6 +3,7 @@
 import aiosqlite
 
 from app.canvas.graph import get_snapshot
+from app.core.fields import FALLBACK_CLASS
 from app.memories.edges import create_edge, delete_edge, list_edges_for_node
 from app.memories.models import EdgeCreate, NodeCreate, NodeUpdate
 from app.memories.nodes import create_node, delete_node, get_node, update_node
@@ -45,11 +46,13 @@ async def test_update_bumps_updated_at(conn: aiosqlite.Connection) -> None:
     assert updated.updated_at >= node.updated_at
 
 
-async def test_update_registers_new_class(conn: aiosqlite.Connection) -> None:
+async def test_update_cannot_invent_a_class(conn: aiosqlite.Connection) -> None:
     node = await create_node(conn, NodeCreate(type="idea", title="A", summary="s"))
-    await update_node(conn, node.id, NodeUpdate(type="Retrospective"))
+    updated = await update_node(conn, node.id, NodeUpdate(type="Retrospective"))
 
-    assert "retrospective" in await list_types(conn)
+    assert updated is not None
+    assert updated.type == FALLBACK_CLASS
+    assert "retrospective" not in await list_types(conn)
 
 
 async def test_omitted_tags_are_preserved(conn: aiosqlite.Connection) -> None:

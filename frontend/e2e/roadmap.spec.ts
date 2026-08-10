@@ -70,18 +70,19 @@ test.describe("roadmap grouping", () => {
     ]);
   });
 
-  test("depends_on and blocks describe the same constraint from either end", () => {
+  test("one direction carries the whole constraint", () => {
+    // What used to need two relations needs one. `blocks` was `depends_on`
+    // with the ends swapped, so the bug that holds up the release is now the
+    // release depending on the bug, and the board reads both sides off it.
     const roadmap = buildRoadmap(
       [node("release", "todo"), node("feature", "doing"), node("bug", "todo")],
       [
         edge("release", "feature", "depends_on"),
-        edge("bug", "release", "blocks"),
+        edge("release", "bug", "depends_on"),
       ],
       TODAY,
     );
 
-    // The release waits on the feature it depends on, and on the bug that
-    // blocks it — two edge directions, one meaning.
     expect(roadmap.byId.get("release")?.blockedBy.sort()).toEqual([
       "bug",
       "feature",

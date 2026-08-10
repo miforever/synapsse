@@ -23,14 +23,15 @@ Work in this order, and do not skip the first step:
 1. `search_index` for it first. If a memory already covers it, `update_memory`
    rather than writing a second one — two memories of the same fact leave
    neither trustworthy.
-2. `list_types()` and `list_tags()`, and reuse what is there. A shared class is
-   worth more than an exact one.
+2. `list_vocabulary()`, and reuse what is there. Classes are a fixed set of
+   thirteen; everything specific about this memory is a tag, and a tag already
+   carrying memories is worth more than a synonym beside it.
 3. Split it if it is more than one thing. A person and the problem involving
    them are two memories; a problem and its fix are two more. Each gets a
    `summary` that states the fact itself, so it is useful without opening it.
 4. Write it, then connect it — to the person it is about, the project it came
-   from, the decision it followed. Use `depends_on`, `blocks` or `part_of`
-   where one of them is true; `relates_to` only when none is.
+   from, the decision it followed. Use `depends_on` or `part_of` where one of
+   them is true; `relates_to` only when neither is.
 5. Look for a link across topics before you stop. The trait that explains both
    an argument and a missed deadline is the connection worth recording, and the
    one that never gets written down.

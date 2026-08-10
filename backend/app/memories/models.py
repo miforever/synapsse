@@ -62,6 +62,10 @@ class NodeOut(TimestampedModel):
     thumbnail_url: str | None
     status: Status | None = None
     target_date: str | None = None
+    # How much use a memory is getting, which is what tells an old but
+    # load-bearing note apart from one nothing has wanted since it was written.
+    last_read_at: str | None = None
+    read_count: int = 0
     metadata: dict[str, Any]
     tags: list[str]
     # Carried with the memory rather than fetched separately: the drawer needs

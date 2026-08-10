@@ -78,6 +78,10 @@ def _to_node(
 async def create_node(conn: aiosqlite.Connection, data: NodeCreate) -> NodeOut:
     node_id = new_id()
     now = utcnow_iso()
+    # Idempotent, and applied here rather than only in the tool so the HTTP
+    # routes cannot write a class the tools would have refused.
+    coerced = types_service.coerce_class(data.type, list(data.tags))
+    data = data.model_copy(update={"type": coerced.type, "tags": coerced.tags})
     await types_service.ensure_type(conn, data.type)
     await conn.execute(
         _INSERT,
@@ -126,6 +130,10 @@ async def update_node(
 
     fields = data.model_dump(exclude_unset=True, exclude={"tags"})
     if "type" in fields:
+        coerced = types_service.coerce_class(fields["type"], list(data.tags or []))
+        fields["type"] = coerced.type
+        if data.tags is not None:
+            data = data.model_copy(update={"tags": coerced.tags})
         await types_service.ensure_type(conn, fields["type"])
     if "metadata" in fields:
         fields["metadata"] = json.dumps(fields["metadata"])
@@ -251,6 +259,48 @@ async def missing_ids(conn: aiosqlite.Connection, node_ids: list[str]) -> list[s
         return []
     found = await summaries_for(conn, node_ids)
     return [node_id for node_id in node_ids if node_id not in found]
+
+
+_MARK_READ = """
+UPDATE nodes SET last_read_at = ?, read_count = read_count + 1 WHERE id = ?
+"""
+
+
+async def mark_read(conn: aiosqlite.Connection, node_id: str) -> None:
+    """Record that something opened this memory.
+
+    Only ever called from the tool an agent uses to read a node, never from
+    the internal get_node that writes go through — otherwise every save would
+    look like a read and the staleness list would be empty forever.
+
+    Deliberately does not touch updated_at: being read is not a change, and
+    bumping it would make every client re-fetch a node nobody edited.
+    """
+    await conn.execute(_MARK_READ, (utcnow_iso(), node_id))
+    await conn.commit()
+
+
+_STALE = """
+SELECT id, type, title, summary, created_at, last_read_at, read_count
+FROM nodes
+WHERE read_count = 0 AND created_at < ?
+ORDER BY created_at
+LIMIT ?
+"""
+
+
+async def list_stale(
+    conn: aiosqlite.Connection, before: str, limit: int = 20
+) -> list[dict[str, object]]:
+    """Memories nothing has opened since they were written, oldest first.
+
+    Never read is the only signal worth acting on. Age alone says nothing —
+    a two-year-old note about how someone likes to be given feedback may be
+    the most valuable row in the store — and a memory that is read often is
+    earning its place however old it is.
+    """
+    rows = await fetch_all(conn, _STALE, (before, limit))
+    return [row_to_dict(row) for row in rows]
 
 
 _ROADMAP = """

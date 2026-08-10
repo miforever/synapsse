@@ -5,15 +5,20 @@ context that replaying a transcript would.
 """
 
 import logging
+from typing import get_args
 
 from app.attachments import files as files_service
 from app.attachments import sources as sources_service
 from app.attachments.models import SourceCreate
 from app.core.database import db
+from app.core.fields import RelationType
+from app.core.identifiers import utcnow_shifted
 from app.mcp.instance import mcp
+from app.memories import duplicates
 from app.memories import edges as edges_service
 from app.memories import nodes as nodes_service
 from app.memories import paths as paths_service
+from app.memories import types as types_service
 from app.memories.models import EdgeCreate, NodeCreate, NodeUpdate
 from app.ws.events import (
     broadcast_new_node,
@@ -42,6 +47,7 @@ async def read_node(node_id: str) -> dict[str, object] | None:
     node = await nodes_service.get_node(db.conn, node_id)
     if node is None:
         return None
+    await nodes_service.mark_read(db.conn, node_id)
     connections = await edges_service.list_edges_for_node(db.conn, node_id)
     return {
         "node": node.model_dump(mode="json"),
@@ -80,74 +86,92 @@ async def add_memory(
     summary: str,
     content: str,
     type: str,
-    linked_to: list[str] | None = None,
+    linked_to: list[dict[str, str]] | None = None,
     tags: list[str] | None = None,
     files: list[str] | None = None,
     sources: list[str] | None = None,
     status: str | None = None,
     target_date: str | None = None,
+    force: bool = False,
 ) -> dict[str, object]:
-    """Persist a new memory, its tags, and optional edges to existing nodes.
+    """Persist a new memory, its tags, and edges to memories it is about.
 
-    Search first: a second memory of the same fact does not replace the first,
-    it competes with it. Use update_memory when something changed.
+    Refuses a write that would duplicate a memory already here, answering with
+    the one it found and its full content so you can fold anything new into it
+    with update_memory instead. Pass force=True only when you have read that
+    memory and the two really are separate facts.
 
-    `type` is the memory's class — the coarse shape of the thing (person,
-    project, issue, decision, fact, preference...). Everything specific about
-    this one belongs in `tags` instead. A girlfriend is a person tagged
-    `girlfriend`, not a class of her own; a recurring argument is an issue
-    tagged with who it involves. An unrecognized `type` is registered rather
-    than rejected, so call list_types() and list_tags() first and reuse what
-    is there — a shared class is worth more than an exact one.
+    `type` is the memory's class, from a fixed set: person, organization,
+    place, object, project, plan, issue, event, idea, fact, decision,
+    preference, resource. Anything specific about this particular memory is a
+    tag instead — a girlfriend is a `person` tagged `girlfriend`, a recurring
+    argument an `issue` tagged with who it involves. A word that is not a class
+    is kept as a tag rather than rejected, and the response says so.
 
     Keep a memory to a single thing. A problem and what fixed it are two
     memories with an edge between them, not one note about both: that way the
     fix can also be linked to the other problems it solved, and revising it
     later does not rewrite the history of the problem.
 
-    `summary` is the one line other agents read at index time — put the fact in
-    it ("prefers being asked before advice"), not a description of the memory
-    ("notes on communication"). `content` takes the reasoning and the detail.
+    `summary` is the one line other agents read at index time, and the line a
+    recall hook puts in front of them — put the fact in it ("prefers being
+    asked before advice"), not a description of the memory ("notes on
+    communication"). `content` takes the reasoning and the detail.
 
-    `linked_to` connects this to what it is about — the person, the project,
-    the decision it followed from. An unlinked memory is nearly unreachable.
-    These edges are `relates_to`; call link_memories afterwards for the more
-    specific depends_on, blocks or part_of, which are the ones that carry
-    meaning.
+    `linked_to` connects this to what it is about, each entry `{"id": ...,
+    "relation": ...}`. Relations are `depends_on` (this needs that first),
+    `part_of` (this belongs inside that), and `relates_to` for a link that is
+    real but unstructured. Omitting `relation` means `relates_to`; prefer a
+    specific one, since the roadmap ignores `relates_to` and an unlinked
+    memory is nearly unreachable.
 
     `files` are paths on this machine, copied into the daemon's own store.
     Mention one from `content` as `[[file:NAME]]` and the canvas renders it
-    where you wrote it, as something the reader can open.
+    where you wrote it.
 
-    `sources` are the URLs this memory was written from, cited in order and
-    referred to from `content` as `[[src:1]]`. Use cite_source instead when you
-    have the page's title and the line you took from it — those are what make a
-    citation worth following.
+    `sources` are URLs this memory was written from, cited in order and
+    referred to as `[[src:1]]`. Use cite_source instead when you have the
+    page's title and the line you took from it.
 
     `status` (todo, doing, done, dropped) and `target_date` (YYYY-MM-DD) mark a
-    memory as work with a state. Set them on plans and issues, and leave them
-    off everything else — a fact is not "todo". Memories carrying a status
-    appear on the roadmap.
+    memory as work and put it on the roadmap. Set them on plans and issues, and
+    leave them off everything else — a fact is not "todo".
     """
-    # Before anything is written: the foreign key catches an unknown target
-    # only after the node is committed, and the caller retries a write that
-    # actually landed.
-    if unknown := await nodes_service.missing_ids(db.conn, linked_to or []):
+    links = _parse_links(linked_to)
+    if isinstance(links, str):
+        return {"error": links, "written": False}
+
+    if unknown := await nodes_service.missing_ids(db.conn, [link[0] for link in links]):
         return {
             "error": "No memory with these ids: " + ", ".join(unknown),
-            "hint": "search_index for the right id, or omit linked_to and "
+            "hint": "search_index for the right id, or leave linked_to out and "
             "connect the memory afterwards with link_memories.",
             "written": False,
         }
 
+    if not force and (
+        found := await duplicates.find_duplicate(db.conn, title, summary)
+    ):
+        existing, score = found
+        full = await nodes_service.get_node(db.conn, existing.id)
+        return {
+            "written": False,
+            "duplicate_of": full.model_dump(mode="json") if full else None,
+            "similarity": round(score, 3),
+            "hint": "This looks like a memory that already exists, returned in "
+            "full above. Fold anything new into it with update_memory. If they "
+            "really are two facts, call again with force=True.",
+        }
+
+    coerced = types_service.coerce_class(type, list(tags or []))
     node = await nodes_service.create_node(
         db.conn,
         NodeCreate(
-            type=type,
+            type=coerced.type,
             title=title,
             summary=summary,
             content=content,
-            tags=tags or [],
+            tags=coerced.tags,
             status=status,  # type: ignore[arg-type]
             target_date=target_date,
         ),
@@ -176,21 +200,51 @@ async def add_memory(
         await edges_service.create_edge(
             db.conn,
             EdgeCreate(
-                source_id=node.id, target_id=target_id, relation_type="relates_to"
+                source_id=node.id,
+                target_id=target_id,
+                relation_type=relation,  # type: ignore[arg-type]
             ),
         )
-        for target_id in linked_to or []
+        for target_id, relation in links
     ]
 
     # Re-read so the broadcast and the response carry the attachments.
     stored = await nodes_service.get_node(db.conn, node.id) or node
     await broadcast_new_node(stored, created)
     return {
+        "written": True,
         "node": stored.model_dump(mode="json"),
         "edges": [edge.model_dump(mode="json") for edge in created],
         "files": [item.model_dump(mode="json") for item in attached],
         "sources": [item.model_dump(mode="json") for item in cited],
+        **({"notice": coerced.notice} if coerced.notice else {}),
     }
+
+
+def _parse_links(
+    linked_to: list[dict[str, str]] | None,
+) -> list[tuple[str, str]] | str:
+    """Read `linked_to` into (id, relation) pairs, or return why it cannot be.
+
+    Accepts a bare id string per entry as well as the mapping, because that is
+    what the tool used to take and agents copy older examples of themselves.
+    """
+    pairs: list[tuple[str, str]] = []
+    for entry in linked_to or []:
+        if isinstance(entry, str):
+            pairs.append((entry, "relates_to"))
+            continue
+        if not isinstance(entry, dict) or "id" not in entry:
+            return 'Each linked_to entry needs an id, as {"id": ..., "relation": ...}.'
+        relation = entry.get("relation") or "relates_to"
+        if relation not in get_args(RelationType):
+            return (
+                f"{relation!r} is not a relation. Use "
+                + ", ".join(get_args(RelationType))
+                + "."
+            )
+        pairs.append((entry["id"], relation))
+    return pairs
 
 
 @mcp.tool
@@ -234,33 +288,6 @@ async def update_memory(
 
 
 @mcp.tool
-async def set_status(
-    node_id: str, status: str, target_date: str | None = None
-) -> dict[str, object] | None:
-    """Mark where a piece of work stands: todo, doing, done or dropped.
-
-    The operation worth its own tool, because it is the one an agent performs
-    while doing something else — finishing a task should cost one call, not a
-    read and a general update.
-
-    `dropped` rather than deleting: what was decided against, and why, is worth
-    as much later as what was done. Returns None if the memory does not exist.
-    """
-    node = await nodes_service.update_node(
-        db.conn,
-        node_id,
-        NodeUpdate.model_validate(
-            {"status": status, **({"target_date": target_date} if target_date else {})}
-        ),
-    )
-    if node is None:
-        return None
-
-    await broadcast_node_updated(node)
-    return {"node": node.model_dump(mode="json")}
-
-
-@mcp.tool
 async def read_roadmap() -> list[dict[str, str | None]]:
     """Every memory carrying a status, soonest first.
 
@@ -289,14 +316,18 @@ async def link_memories(
     target_id: str,
     relation_type: str = "relates_to",
     weight: float = 1.0,
+    remove: bool = False,
 ) -> dict[str, object]:
-    """Connect two existing memories.
+    """Connect two memories, or with remove=True take the connection away.
 
     Pick the relation that is true: `depends_on` (this needs that first),
-    `blocks` (this is stopping that), `part_of` (this belongs inside that), or
-    `relates_to` when the link is real but unstructured. Prefer a specific one
-    — `relates_to` everywhere says little more than no edge at all, and the
-    roadmap ignores it for exactly that reason.
+    `part_of` (this belongs inside that), or `relates_to` when the link is real
+    but unstructured. Prefer a specific one — `relates_to` everywhere says
+    little more than no edge at all, and the roadmap ignores it for exactly
+    that reason.
+
+    There is no `blocks`: it is `depends_on` with the ends swapped, and having
+    both meant one situation could be recorded two ways.
 
     Worth linking across topics, not only within them: the trait that explains
     both a disagreement with someone and a delay on a project is the connection
@@ -304,6 +335,13 @@ async def link_memories(
     """
     if unknown := await nodes_service.missing_ids(db.conn, [source_id, target_id]):
         return {"error": "No memory with these ids: " + ", ".join(unknown)}
+
+    if remove:
+        return {
+            "removed": await edges_service.delete_between(
+                db.conn, source_id, target_id, relation_type
+            )
+        }
 
     edge = await edges_service.create_edge(
         db.conn,
@@ -318,6 +356,17 @@ async def link_memories(
 
 
 @mcp.tool
-async def unlink_memories(edge_id: str) -> dict[str, object]:
-    """Remove a connection between two memories, leaving both in place."""
-    return {"deleted": await edges_service.delete_edge(db.conn, edge_id)}
+async def stale_memories(days: int = 90, limit: int = 20) -> list[dict[str, object]]:
+    """Memories written more than `days` ago that nothing has opened since.
+
+    The store only grows, and ranking gets worse as it fills with rows nobody
+    wants. This is the list to review: confirm what still holds, update what
+    changed, delete what turned out to be wrong.
+
+    Never-read is the only signal used. Age on its own says nothing — a note
+    about how someone likes to be given feedback can be two years old and the
+    most useful row here — and anything being read regularly is left alone
+    however old it is.
+    """
+    before = utcnow_shifted(-days)
+    return await nodes_service.list_stale(db.conn, before, limit)

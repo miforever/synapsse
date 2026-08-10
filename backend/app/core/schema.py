@@ -3,6 +3,8 @@
 Kept separate from connection handling so the DDL reads as one document.
 """
 
+from app.core.fields import NODE_CLASSES
+
 # Every timestamp column uses the same UTC ISO-8601 expression.
 _NOW = "(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"
 
@@ -41,8 +43,11 @@ CREATE TABLE IF NOT EXISTS edges (
     id TEXT PRIMARY KEY,
     source_id TEXT NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
     target_id TEXT NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
+    -- `blocks` is deliberately absent: it was depends_on with the ends
+    -- swapped, and holding both meant the same situation could be stored two
+    -- ways. A database written before it went is migrated in REWRITES.
     relation_type TEXT NOT NULL CHECK (
-        relation_type IN ('depends_on', 'relates_to', 'blocks', 'part_of')
+        relation_type IN ('depends_on', 'relates_to', 'part_of')
     ),
     weight REAL NOT NULL DEFAULT 1.0 CHECK (weight >= 0.0 AND weight <= 1.0),
     created_at TEXT NOT NULL DEFAULT {_NOW}
@@ -183,6 +188,29 @@ SCHEMA = TABLES + INDEXES + FULLTEXT
 ADDITIONS: tuple[str, ...] = (
     "ALTER TABLE nodes ADD COLUMN status TEXT",
     "ALTER TABLE nodes ADD COLUMN target_date TEXT",
+    # What the staleness read is built from. A memory nothing has looked at
+    # since it was written is the candidate for review; one that gets read
+    # every week is earning its place whatever its age.
+    "ALTER TABLE nodes ADD COLUMN last_read_at TEXT",
+    "ALTER TABLE nodes ADD COLUMN read_count INTEGER NOT NULL DEFAULT 0",
+)
+
+# Data that has to change shape, not just tables.
+#
+# Applied on every boot and written to be harmless on the second run — SQLite
+# has no migration ledger here, and a single-file local database does not
+# warrant one.
+REWRITES: tuple[str, ...] = (
+    # blocks(A, B) says exactly what depends_on(B, A) says, so the rows are
+    # turned round rather than dropped: the relationship survives, in the one
+    # direction everything now reads.
+    """
+    UPDATE edges
+    SET source_id = target_id,
+        target_id = source_id,
+        relation_type = 'depends_on'
+    WHERE relation_type = 'blocks'
+    """,
 )
 
 # A client that has not asked what changed in ninety days is reloading from
@@ -210,28 +238,6 @@ PRAGMAS = (
     "PRAGMA foreign_keys=ON",
 )
 
-# Seeded on boot; agents may register further classes at runtime. How each is
-# rendered (colour, icon, label casing) is entirely the canvas's concern.
-#
-# Deliberately coarse. A class is the *shape* of a thing and carries one colour
-# on the canvas; anything more specific belongs in tags. A pet is an `object`
-# tagged `animal`, not its own class — unless a given user tracks enough of
-# them to justify registering one, which they can do without a migration.
-DEFAULT_NODE_TYPES: tuple[str, ...] = (
-    # Entities
-    "person",
-    "organization",
-    "place",
-    "object",
-    # Work
-    "project",
-    "plan",
-    "issue",
-    "event",
-    # Knowledge
-    "idea",
-    "fact",
-    "decision",
-    "preference",
-    "resource",
-)
+# Seeded on boot. The set itself lives in fields.py, next to the coercion that
+# enforces it; how each is rendered is the canvas's concern.
+DEFAULT_NODE_TYPES: tuple[str, ...] = NODE_CLASSES

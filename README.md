@@ -230,23 +230,34 @@ able to issue orders to a later one just by phrasing itself as a command.
 
 Each memory is a **node** — a title, a short summary for cheap index reads, a
 full Markdown body, and free-form JSON metadata. Nodes are joined by typed,
-weighted **edges** (`depends_on`, `relates_to`, `blocks`, `part_of`).
+weighted **edges** — `depends_on`, `part_of`, and `relates_to` for a link that
+is real but unstructured.
+
+There is no `blocks`: it said exactly what `depends_on` says with the ends
+swapped, so one situation could be recorded two ways and every reader had to
+normalise before it could answer.
 
 Nodes are organized two ways:
 
-- **Class** — exactly one per node, describing the coarse shape of the thing.
-  Ships with entities (`person`, `organization`, `place`, `object`), work
-  (`project`, `plan`, `issue`, `event`), and knowledge (`idea`, `fact`,
-  `decision`, `preference`, `resource`). The set lives in a table rather than a
-  fixed enum, so agents register new classes as they need them — no migration.
+- **Class** — exactly one per node, from a fixed thirteen: entities (`person`,
+  `organization`, `place`, `object`), work (`project`, `plan`, `issue`,
+  `event`), and knowledge (`idea`, `fact`, `decision`, `preference`,
+  `resource`). Closed on purpose — the canvas paints a colour per class, and a
+  set that grows at runtime is a set where half the graph is the fallback grey.
 - **Tags** — any number per node, created freely and indexed for filtering.
 
-The split is deliberate: a class is the shape, tags are the specifics. A pet is
-an `object` tagged `animal`, not a class of its own — unless you track enough of
-them to want one, which costs nothing.
+The split is deliberate: a class is the shape, tags are the specifics. A
+girlfriend is a `person` tagged `girlfriend`; a pet is an `object` tagged `pet`.
+A word that is not a class is kept as a tag and the write still succeeds — the
+memory is never lost to a vocabulary argument, and the response says what it
+did.
 
-Names are normalized on write, so `Task`, `task`, and `TASK` resolve to a single
-class instead of three.
+Adding a fourteenth class is a release rather than a migration, and
+`list_vocabulary` returns tag counts, so the tags that keep accumulating are
+the evidence for which one to add.
+
+Names are normalized on write, so `Task`, `task`, and `TASK` resolve to one
+thing instead of three.
 
 Memories are editable and removable — a store you cannot correct just
 accumulates confidently stated mistakes.
@@ -318,12 +329,17 @@ Exposed over MCP:
 | `add_memory(...)`                             | Persist a node, its tags, edges, files and sources        |
 | `update_memory(...)`                          | Correct a memory; omitted fields stay untouched           |
 | `delete_memory(node_id)`                      | Remove a memory and every edge touching it                |
-| `link_memories(...)` / `unlink_memories(...)`  | Connect or disconnect two memories                        |
-| `attach_file(...)` / `detach_file(...)`        | Attach a file on this machine, or remove one              |
-| `set_status(...)`                              | Mark work as todo, doing, done or dropped                 |
-| `read_roadmap()`                               | Everything with a status, soonest first                   |
-| `cite_source(...)` / `uncite_source(...)`      | Record where a claim came from, or remove a citation      |
-| `list_types()` / `list_tags()`                 | Existing vocabulary, so agents reuse rather than invent   |
+| `link_memories(..., remove=False)`            | Connect two memories, or take the connection away         |
+| `attach_file(..., remove="")`                 | Attach a file on this machine, or delete a stored copy    |
+| `cite_source(..., remove="")`                 | Record where a claim came from, or drop a citation        |
+| `read_roadmap()`                              | Everything with a status, soonest first                   |
+| `stale_memories(days, limit)`                 | What nothing has read since it was written                |
+| `list_vocabulary()`                           | The classes, the tags in use, and what the canvas renders |
+
+Thirteen, down from eighteen. Each one is a schema in the system prompt of
+every session in every project, so an inverse pair that could be a parameter
+was costing context in perpetuity. `set_status` went for the same reason: it
+was `update_memory` with fewer arguments.
 
 ## Search
 

@@ -109,8 +109,8 @@ async def test_heaviest_edge_describes_the_hop(conn: aiosqlite.Connection) -> No
     """Two memories joined twice are described by the link that matters most."""
     first, second = await _node(conn, "First"), await _node(conn, "Second")
     await _link(conn, first, second, "relates_to", weight=0.2)
-    await _link(conn, first, second, "blocks", weight=0.9)
+    await _link(conn, first, second, "depends_on", weight=0.9)
 
     path = await path_between(conn, first, second)
     assert len(path.edges) == 1
-    assert path.edges[0].relation_type == "blocks"
+    assert path.edges[0].relation_type == "depends_on"

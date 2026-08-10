@@ -43,6 +43,24 @@ async def list_edges_for_node(
     return [_to_edge(row) for row in rows]
 
 
+async def delete_between(
+    conn: aiosqlite.Connection, source_id: str, target_id: str, relation_type: str
+) -> int:
+    """Remove the edges joining two memories, in either direction.
+
+    Both directions, because "these two are no longer connected" is what a
+    caller means, and asking them to know which end was written first is
+    asking them to remember something the graph never showed them.
+    """
+    cursor = await conn.execute(
+        "DELETE FROM edges WHERE relation_type = ? AND "
+        "((source_id = ? AND target_id = ?) OR (source_id = ? AND target_id = ?))",
+        (relation_type, source_id, target_id, target_id, source_id),
+    )
+    await conn.commit()
+    return cursor.rowcount
+
+
 async def delete_edge(conn: aiosqlite.Connection, edge_id: str) -> bool:
     cursor = await conn.execute("DELETE FROM edges WHERE id = ?", (edge_id,))
     await conn.commit()

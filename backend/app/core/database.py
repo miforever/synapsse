@@ -9,6 +9,7 @@ from app.core.schema import (
     DEFAULT_NODE_TYPES,
     PRAGMAS,
     PRUNE_TOMBSTONES,
+    REWRITES,
     SCHEMA,
     VECTOR_TABLE,
 )
@@ -65,6 +66,8 @@ async def init_db(db_path: str | None = None) -> aiosqlite.Connection:
         await conn.execute(pragma)
     await conn.executescript(SCHEMA)
     await _apply_additions(conn)
+    for rewrite in REWRITES:
+        await conn.execute(rewrite)
 
     if await _load_vector_extension(conn):
         await conn.executescript(VECTOR_TABLE.format(dim=settings.embedding_dim))
