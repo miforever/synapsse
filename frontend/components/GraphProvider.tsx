@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -13,6 +14,7 @@ import {
 import { useGraph } from "@/hooks/useGraph";
 import { useGraphStream } from "@/hooks/useGraphStream";
 import { useLayout } from "@/hooks/useLayout";
+import { useUntangle } from "@/hooks/useUntangle";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
 import { useTheme, type Theme, type ThemePreference } from "@/hooks/useTheme";
 import type { GraphData, PositionedNode } from "@/lib/force-graph";
@@ -45,6 +47,16 @@ interface GraphStore {
   reducedMotion: boolean;
   markMoved: () => void;
   resetLayout: () => void;
+  /** Open the graph into a radial arrangement and pin it there. */
+  untangle: () => void;
+  /** True while that arrangement is travelling, so the control can say so. */
+  untangling: boolean;
+  /**
+   * Filled in by whichever canvas is mounted, so an arrangement can be framed
+   * once it lands. A ref rather than a callback in the store: the canvas owns
+   * the renderer handle, and passing it upward would re-render the graph.
+   */
+  canvasFit: React.MutableRefObject<(() => void) | null>;
 
   /** Light, dark, or whatever the system says — see useTheme. */
   themePreference: ThemePreference;
@@ -143,6 +155,17 @@ export function GraphProvider({ children }: { children: ReactNode }) {
     ready: data.nodes.length > 0,
   });
 
+  const canvasFit = useRef<(() => void) | null>(null);
+
+  const { untangle, untangling } = useUntangle({
+    nodes: data.nodes as PositionedNode[],
+    links: data.links,
+    // Untangling releases every pin, so what has to happen afterwards is the
+    // stored arrangement being cleared, not a new one written.
+    onArranged: resetLayout,
+    fit: canvasFit,
+  });
+
   const store = useMemo(
     () => ({
       data,
@@ -156,6 +179,9 @@ export function GraphProvider({ children }: { children: ReactNode }) {
       reducedMotion,
       markMoved,
       resetLayout,
+      untangle,
+      untangling,
+      canvasFit,
       themePreference,
       theme,
       chooseTheme,
@@ -170,6 +196,8 @@ export function GraphProvider({ children }: { children: ReactNode }) {
       reducedMotion,
       markMoved,
       resetLayout,
+      untangle,
+      untangling,
       themePreference,
       theme,
       chooseTheme,

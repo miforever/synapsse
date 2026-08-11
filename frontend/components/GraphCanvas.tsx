@@ -46,8 +46,10 @@ import {
   updateLinkObject,
 } from "@/lib/link-plasma";
 import { createGatherForce } from "@/lib/gather-force";
+import { hashUnit } from "@/lib/hash";
 import { createLivingLinksForce } from "@/lib/living-links";
 import { degreesOf, weighBy } from "@/lib/node-scale";
+import { createSeparateForce } from "@/lib/separate-force";
 import {
   applyFocus,
   applyHover,
@@ -101,6 +103,13 @@ interface ForceGraphProps {
   linkOpacity?: number;
   showNavInfo?: boolean;
   // 2D only
+  /**
+   * What the renderer takes a node's radius to be, as
+   * `sqrt(val) * nodeRelSize`. With a custom paint callback it no longer
+   * affects anything drawn - only where the pointer finds the node.
+   */
+  nodeVal?: (node: GraphNode) => number;
+  nodeRelSize?: number;
   nodeColor?: (node: GraphNode) => string;
   nodeCanvasObject?: (
     node: PositionedNode,
@@ -187,6 +196,15 @@ interface Props {
   graphRef: React.RefObject<ForceGraphHandle | null>;
 }
 
+/**
+ * The radius a node grows to under the pointer, per unit of weight.
+ *
+ * Shared with the hit area rather than written twice: they have to agree, and
+ * a node whose target does not match the circle you can see is the kind of
+ * wrongness that is felt long before it is diagnosed.
+ */
+const HOVER_RADIUS = 5.6;
+
 const LABEL_MAX_CHARS = 24;
 const MAX_LABEL_PX = 12;
 
@@ -261,6 +279,28 @@ function GraphCanvasImpl({
   const nodeColor = useCallback(
     (node: GraphNode) => colorForClass(node.type, canvasTheme),
     [canvasTheme],
+  );
+
+  /*
+   * Where the pointer finds a memory.
+   *
+   * The renderer derives this from `val`, which nothing was setting - so every
+   * node had the same 4-unit hit circle while the painted disc grew with how
+   * connected it is. On the big hubs, the ones you most want to click, the
+   * target was a fraction of the dot and you had to aim at its centre.
+   *
+   * Sized to the radius a node reaches once lit rather than its resting one,
+   * with nodeRelSize pinned to 1 so `val` is a plain radius squared. Matching
+   * the lit size means the node grows to meet the pointer exactly as it
+   * becomes hoverable, instead of the hit area ending inside the circle you
+   * can see.
+   */
+  const hitArea = useCallback(
+    (node: GraphNode) => {
+      const radius = HOVER_RADIUS * weigh(degrees.get(node.id) ?? 0);
+      return radius * radius;
+    },
+    [degrees, weigh],
   );
 
   const linkWidth = useCallback(
@@ -367,7 +407,10 @@ function GraphCanvasImpl({
        *
        * Only ever additive, so hovering the open memory cannot shrink it.
        */
-      const radius = Math.max(baseRadius, (isHover ? 5.6 : lit ? 4.4 : 0) * weight);
+      const radius = Math.max(
+        baseRadius,
+        (isHover ? HOVER_RADIUS : lit ? 4.4 : 0) * weight,
+      );
       const color = colorForClass(node.type, canvasTheme);
 
       ctx.globalAlpha = !focusing ? 1 : isFocus ? 1 : highlighted ? 0.85 : 0.12;
@@ -545,7 +588,17 @@ function GraphCanvasImpl({
      * room around it — without this its neighbours sit inside it and the hub
      * that matters most is the hardest thing to read.
      */
-    const base = -55 - Math.min(320, 12 * Math.sqrt(n));
+    /*
+     * Softer than it was, because it is no longer the only thing keeping
+     * memories apart.
+     *
+     * Repulsion previously had to be strong enough to guarantee clearance on
+     * its own, and since it falls off with distance the only way to do that
+     * was to push hard at close range and consequently everywhere else too —
+     * which is what inflated the graph. The separation force below now owns
+     * clearance, so this only has to space things out.
+     */
+    const base = -30 - Math.min(170, 6.5 * Math.sqrt(n));
     charge?.strength((node: GraphNode) => base * weigh(degrees.get(node.id) ?? 0));
     /*
      * Keep repulsion local.
@@ -555,7 +608,7 @@ function GraphCanvasImpl({
      * the range means a drag disturbs its own neighbourhood and nothing else,
      * and it also keeps the many-body pass affordable at scale.
      */
-    charge?.distanceMax(260);
+    charge?.distanceMax(190);
 
     const link = graph.d3Force("link") as
       | { distance: (value: (link: GraphEdge) => number) => void }
@@ -565,12 +618,34 @@ function GraphCanvasImpl({
      * measured centre to centre has to clear both ends, and a fixed length
      * buries a hub's neighbours in its own disc.
      */
-    const span = 34 + Math.min(70, 2 * Math.sqrt(n));
+    const span = 24 + Math.min(44, 1.5 * Math.sqrt(n));
     link?.distance((edge: GraphEdge) => {
-      const ends =
-        weigh(degrees.get(endpointId(edge.source)) ?? 0) +
-        weigh(degrees.get(endpointId(edge.target)) ?? 0);
-      return span * (0.6 + ends * 0.25);
+      const a = weigh(degrees.get(endpointId(edge.source)) ?? 0);
+      const b = weigh(degrees.get(endpointId(edge.target)) ?? 0);
+      /*
+       * Clearance from the larger end, not the sum.
+       *
+       * A link has to clear the discs at both ends, but the big one sets the
+       * requirement — adding them made a hub's edges long enough to clear two
+       * hubs when only one is present.
+       */
+      const clearance = Math.max(a, b) + 0.3 * Math.min(a, b);
+      /*
+       * Vary the length per edge, or the graph comes out as a wheel.
+       *
+       * This is what made the layout read as a circle with straight spokes.
+       * A hub's neighbours are nearly all leaves, so every edge off it scored
+       * an identical clearance and therefore an identical length — and a set
+       * of equal-length links from one point is the definition of a circle,
+       * with each leaf's single edge leaving nothing to bend it off the
+       * radius. Scattering the lengths lets the neighbours fall into lobes at
+       * varying depth instead of onto one ring.
+       *
+       * Keyed off the endpoint ids so it is stable: a random draw per call
+       * would be re-rolled every tick and the graph would shimmer.
+       */
+      const spread = 0.78 + 0.44 * hashUnit(`${endpointId(edge.source)} ${endpointId(edge.target)}`);
+      return span * (0.45 + clearance * 0.3) * spread;
     });
 
     /*
@@ -600,6 +675,23 @@ function GraphCanvasImpl({
     graph.d3Force(
       "gather",
       createGatherForce({ dimensions: mode === "3d" ? 3 : 2 }),
+    );
+
+    /*
+     * Clearance, so the shorter links above cannot pile memories up.
+     *
+     * Charge used to be doing this job as well as spacing the graph, and it is
+     * bad at both at once: enough repulsion to guarantee no overlap is far
+     * more than is wanted for density. Splitting them lets the links pull the
+     * graph in tight while this holds the discs apart. The radius mirrors the
+     * drawn size in node-sprite, plus room for the label to breathe.
+     */
+    graph.d3Force(
+      "separate",
+      createSeparateForce({
+        dimensions: mode === "3d" ? 3 : 2,
+        radius: (node) => 3.6 * weigh(degrees.get(node.id) ?? 0) + 7,
+      }),
     );
 
     /*
@@ -1081,6 +1173,10 @@ function GraphCanvasImpl({
     <ForceGraph2D
       innerRef={attach}
       {...shared}
+      // Only on the flat canvas: the 3D scene raycasts the sprite itself, so
+      // its hit area already follows what is drawn.
+      nodeRelSize={1}
+      nodeVal={hitArea}
       nodeColor={nodeColor}
       nodeCanvasObject={paintNode2D}
       nodeCanvasObjectMode={() => "replace"}

@@ -53,6 +53,8 @@ export function AppBar() {
     setMotion,
     reducedMotion,
     resetLayout,
+    untangle,
+    untangling,
     themePreference,
     chooseTheme,
   } = useGraphStore();
@@ -65,6 +67,9 @@ export function AppBar() {
   // Each section counts what it is about: the canvas counts memories, the
   // roadmap counts the ones that are work.
   const onRoadmap = current.slug === "roadmap";
+  // Arranging the canvas means nothing on the roadmap or the board, which draw
+  // their own layouts from the same graph.
+  const onCanvas = current.slug === "canvas";
   const count = onRoadmap
     ? data.nodes.filter((node) => node.status).length
     : data.nodes.length;
@@ -232,6 +237,8 @@ export function AppBar() {
           onMotionChange={setMotion}
           reducedMotion={reducedMotion}
           onResetLayout={resetLayout}
+          onUntangle={onCanvas ? untangle : undefined}
+          untangling={untangling}
           theme={themePreference}
           onThemeChange={chooseTheme}
         />

@@ -20,6 +20,10 @@ interface Props {
   onMotionChange: (motion: boolean) => void;
   reducedMotion: boolean;
   onResetLayout: () => void;
+  /** Absent where there is no canvas to arrange, and then the control is not
+   *  offered at all - a disabled button would only pose a question. */
+  onUntangle?: () => void;
+  untangling: boolean;
   onClose: () => void;
   theme: ThemePreference;
   onThemeChange: (theme: ThemePreference) => void;
@@ -88,6 +92,8 @@ export function SettingsPanel({
   onMotionChange,
   reducedMotion,
   onResetLayout,
+  onUntangle,
+  untangling,
   onClose,
   theme,
   onThemeChange,
@@ -147,6 +153,42 @@ export function SettingsPanel({
               disabled={reducedMotion}
               onChange={onMotionChange}
             />
+
+            {/*
+              The counterpart to resetting: one puts the simulation back in
+              charge, the other takes it off it entirely. They belong together,
+              untangling first, since it is the one you reach for while looking
+              at a graph you cannot read.
+
+              The panel stays open here, unlike the reset below. Untangling is
+              something you watch land, and closing the panel over it would
+              hide the thing the press was for.
+            */}
+            {onUntangle && (
+            <button
+              type="button"
+              onClick={onUntangle}
+              disabled={untangling}
+              className="flex w-full items-start gap-3 rounded-lg px-2 py-2 text-left transition hover:bg-elevated/[.06] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <span
+                className={`mt-0.5 flex h-4 w-7 shrink-0 items-center justify-center text-faint ${
+                  untangling ? "animate-spin" : ""
+                }`}
+              >
+                ✻
+              </span>
+              <span className="min-w-0">
+                <span className="block text-xs text-strong">
+                  {untangling ? "Untangling…" : "Untangle"}
+                </span>
+                <span className="block text-[10px] leading-snug text-faint">
+                  Open the graph into rings around its most connected memories,
+                  so every branch gets its own space
+                </span>
+              </span>
+            </button>
+            )}
 
             {/*
               Dragging a memory pins it, and pins now outlive the session — so
