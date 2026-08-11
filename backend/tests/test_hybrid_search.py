@@ -70,11 +70,37 @@ async def test_deleting_a_memory_removes_its_vector(
     assert await vectors.count(conn) == 0
 
 
+async def _stored_vector(conn: aiosqlite.Connection, node_id: str) -> bytes:
+    async with conn.execute(
+        "SELECT embedding FROM node_vectors WHERE node_id = ?", (node_id,)
+    ) as cursor:
+        row = await cursor.fetchone()
+    assert row is not None
+    return bytes(row[0])
+
+
 async def test_editing_a_memory_reindexes_it(conn: aiosqlite.Connection) -> None:
     node = await create_node(conn, NodeCreate(type="idea", title="A", summary="s"))
+    before = await _stored_vector(conn, node.id)
+
     await update_node(conn, node.id, NodeUpdate(title="Completely different"))
 
     # Still exactly one vector: replaced rather than duplicated.
+    assert await vectors.count(conn) == 1
+
+    # And it is genuinely the new one. Counting alone cannot see this fail:
+    # re-indexing swallows its own errors by design, so a write that never
+    # lands leaves the original vector in place and the count unchanged. That
+    # is exactly how INSERT OR REPLACE against a vec0 table shipped, leaving
+    # every edited memory findable only under its old wording.
+    assert await _stored_vector(conn, node.id) != before
+
+
+async def test_reindexing_survives_repeated_edits(conn: aiosqlite.Connection) -> None:
+    """Editing the same memory again must not accumulate vectors."""
+    node = await create_node(conn, NodeCreate(type="idea", title="A", summary="s"))
+    for title in ("B", "C", "D"):
+        await update_node(conn, node.id, NodeUpdate(title=title))
     assert await vectors.count(conn) == 1
 
 
