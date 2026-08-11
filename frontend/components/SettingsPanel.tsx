@@ -2,6 +2,7 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import type { ThemePreference } from "@/hooks/useTheme";
+import type { UntangleMode } from "@/hooks/useUntangle";
 import type { MediaSettings } from "@/lib/types";
 
 const THEMES = [
@@ -22,7 +23,7 @@ interface Props {
   onResetLayout: () => void;
   /** Absent where there is no canvas to arrange, and then the control is not
    *  offered at all - a disabled button would only pose a question. */
-  onUntangle?: () => void;
+  onUntangle?: (mode: UntangleMode) => void;
   untangling: boolean;
   onClose: () => void;
   theme: ThemePreference;
@@ -69,6 +70,55 @@ function Switch({
         </span>
       </span>
     </button>
+  );
+}
+
+/**
+ * One thing you can do to the canvas, as a mark that names itself.
+ *
+ * The label sits above rather than below: this panel opens upward from the
+ * foot of the window, so anything hung underneath a control is off-screen or
+ * over the bar itself. Pointer-events are off on the label so it can never
+ * come between the pointer and the button that raised it.
+ */
+function Action({
+  mark,
+  name,
+  hint,
+  busy,
+  disabled,
+  onClick,
+}: {
+  mark: string;
+  name: string;
+  hint: string;
+  busy?: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <span className="group relative">
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={disabled}
+        aria-label={`${name}. ${hint}`}
+        className="flex h-8 w-8 items-center justify-center rounded-lg text-sm text-faint transition hover:bg-elevated/[.08] hover:text-strong disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        <span className={busy ? "inline-block animate-spin" : undefined}>
+          {mark}
+        </span>
+      </button>
+
+      <span className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded-md border border-line/[.12] bg-canvas/95 px-2 py-1 opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100">
+        <span className="block text-[11px] leading-none text-strong">
+          {name}
+        </span>
+        <span className="mt-0.5 block text-[10px] leading-none text-faint">
+          {hint}
+        </span>
+      </span>
+    </span>
   );
 }
 
@@ -164,58 +214,51 @@ export function SettingsPanel({
               something you watch land, and closing the panel over it would
               hide the thing the press was for.
             */}
-            {onUntangle && (
-            <button
-              type="button"
-              onClick={onUntangle}
-              disabled={untangling}
-              className="flex w-full items-start gap-3 rounded-lg px-2 py-2 text-left transition hover:bg-elevated/[.06] disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              <span
-                className={`mt-0.5 flex h-4 w-7 shrink-0 items-center justify-center text-faint ${
-                  untangling ? "animate-spin" : ""
-                }`}
-              >
-                ✻
-              </span>
-              <span className="min-w-0">
-                <span className="block text-xs text-strong">
-                  {untangling ? "Untangling…" : "Untangle"}
-                </span>
-                <span className="block text-[10px] leading-snug text-faint">
-                  Open the graph into rings around its most connected memories,
-                  so every branch gets its own space
-                </span>
-              </span>
-            </button>
-            )}
-
             {/*
-              Dragging a memory pins it, and pins now outlive the session — so
-              there has to be a way back. Without this the only route to an
-              automatic layout again would be editing the database.
+              A row of marks rather than three more labelled rows.
+
+              These are things you do, not settings you read, and the switches
+              above already carry a paragraph each - a third and fourth made
+              the panel a wall of prose you had to scan to find one button.
+              What each does is one short line, and it only has to be there
+              while you are pointing at it.
             */}
-            <button
-              type="button"
-              onClick={() => {
-                onResetLayout();
-                onClose();
-              }}
-              className="flex w-full items-start gap-3 rounded-lg px-2 py-2 text-left transition hover:bg-elevated/[.06]"
-            >
-              <span className="mt-0.5 flex h-4 w-7 shrink-0 items-center justify-center text-faint">
-                ↺
-              </span>
-              <span className="min-w-0">
-                <span className="block text-xs text-strong">
-                  Reset arrangement
-                </span>
-                <span className="block text-[10px] leading-snug text-faint">
-                  Release every memory you placed by hand and lay the graph out
-                  afresh
-                </span>
-              </span>
-            </button>
+            <div className="flex items-center gap-1 px-1 py-1">
+              {onUntangle && (
+                <Action
+                  mark="✳"
+                  name={untangling ? "Untangling" : "Untangle"}
+                  hint="Let the graph find its own shape"
+                  busy={untangling}
+                  disabled={untangling}
+                  onClick={() => onUntangle("free")}
+                />
+              )}
+              {onUntangle && (
+                <Action
+                  mark="◎"
+                  name="By connection"
+                  hint="Rings out from the busiest memory"
+                  busy={untangling}
+                  disabled={untangling}
+                  onClick={() => onUntangle("levels")}
+                />
+              )}
+              {/*
+                Dragging a memory pins it, and pins outlive the session, so
+                there has to be a way back. Without this the only route to an
+                automatic layout again would be editing the database.
+              */}
+              <Action
+                mark="↺"
+                name="Reset"
+                hint="Release everything placed by hand"
+                onClick={() => {
+                  onResetLayout();
+                  onClose();
+                }}
+              />
+            </div>
 
             <p className="mt-2 px-2 pb-1 font-mono text-[9px] uppercase tracking-[0.2em] text-faint/70">
               Content

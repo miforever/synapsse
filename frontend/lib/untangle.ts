@@ -31,7 +31,7 @@ import type { PositionedNode } from "./force-graph";
 import { endpointId, type GraphEdge } from "./types";
 
 /** Resting length of a connection between two average memories. */
-const LINK_DISTANCE = 68;
+export const LINK_DISTANCE = 68;
 
 /** How hard a spring pulls per iteration. Above ~0.5 the solver oscillates. */
 const LINK_STRENGTH = 0.35;
@@ -114,7 +114,7 @@ interface Body {
   weight: number;
 }
 
-function degreesOf(links: GraphEdge[]): Map<string, number> {
+export function degreesOf(links: GraphEdge[]): Map<string, number> {
   const degrees = new Map<string, number>();
   for (const link of links) {
     const source = endpointId(link.source);
@@ -127,7 +127,7 @@ function degreesOf(links: GraphEdge[]): Map<string, number> {
 }
 
 /** Matches the renderer's own sizing, so spacing tracks what is on screen. */
-function sizeFor(degree: number): number {
+export function sizeFor(degree: number): number {
   return 5 + Math.sqrt(degree) * 3.4;
 }
 
