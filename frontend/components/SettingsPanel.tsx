@@ -261,9 +261,13 @@ function Row({
 /**
  * One thing you can do to the canvas: a mark and its name, on one line.
  *
- * Stacked tiles were for a row of three. With two left there is width to
- * spare, and a button that reads left to right is simply a button - the tile
- * was only ever a way of fitting a name under an icon.
+ * Full width and stacked, not two pills sharing a row. Side by side and
+ * equally sized they read as a segmented control - one of these two, pick -
+ * which is what the theme track above actually is, and these are nothing of
+ * the kind: they are two unrelated things you press, and pressing one says
+ * nothing about the other. Left-aligned for the same reason. A centred label
+ * in a symmetrical pill is the shape of a choice; text that starts where every
+ * other line in the panel starts is the shape of a command.
  *
  * The hint hangs off the wrapper, not off the button. A disabled control
  * dispatches no pointer events at all, so a tile that explained itself stopped
@@ -289,19 +293,19 @@ function Action({
   explain: Explain;
 }) {
   return (
-    <span className="flex flex-1" {...explains(hint, explain)}>
+    <span className="flex" {...explains(hint, explain)}>
       <button
         type="button"
         onClick={onClick}
         disabled={disabled}
         aria-label={`${name}. ${hint}`}
-        className="flex w-full items-center justify-center gap-2 rounded-full border border-line/[.08] bg-elevated/[.03] px-3 py-[7px] text-faint transition hover:border-line/[.16] hover:bg-elevated/[.08] hover:text-strong disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-line/[.08] disabled:hover:bg-elevated/[.03]"
+        className="flex w-full items-center gap-2.5 rounded-[14px] border border-line/[.1] bg-elevated/[.06] px-2.5 py-2 text-left text-muted shadow-[inset_0_1px_0_rgb(255_255_255/5%)] transition hover:border-line/[.2] hover:bg-elevated/[.11] hover:text-strong active:bg-elevated/[.04] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-line/[.1] disabled:hover:bg-elevated/[.06]"
       >
         <Icon
           name={icon}
           className={`h-3.5 w-3.5 shrink-0 ${busy ? "animate-spin" : ""}`}
         />
-        <span className="text-[11px] leading-none">{name}</span>
+        <span className="text-[12px] leading-none">{name}</span>
       </button>
     </span>
   );
@@ -462,7 +466,7 @@ export function SettingsPanel({
             land, and closing over it would hide what the press was for. Reset
             closes, because there is nothing to watch.
           */}
-          <div className="flex gap-1.5 px-2.5">
+          <div className="flex flex-col gap-1.5 px-2.5">
             {onUntangle && (
               <Action
                 icon="graph"

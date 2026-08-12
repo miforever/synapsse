@@ -41,14 +41,16 @@ export interface Weighting {
  * lifts the floor and leaves the hubs with less room to stand out in. So a
  * wider range is only actually visible if the curve straightens with it.
  *
- * At 2.6 and 0.6 the busiest memory in a store whose hub has a dozen
- * connections drew 1.9x the size of a memory with one. At 3.6 and 0.7 it draws
- * 2.5x, while a memory with no connections at all is still 1 - the floor is
- * held, and the range above it is spent on the memories that earned it.
+ * In a store whose busiest memory has a dozen connections, 2.6 and 0.6 drew a
+ * hub at 1.9x a memory with one connection - the difference was there and you
+ * had to look for it. At 4.6 and 0.8 it draws 3.1x, which is a hub you find by
+ * glancing at the canvas rather than by comparing two discs. A memory with no
+ * connections at all is still 1: the floor is held, and the whole of the range
+ * above it is spent on the memories that earned it.
  */
 export function weighBy(
   degrees: ReadonlyMap<string, number>,
-  { max = 3.6, curve = 0.7 }: { max?: number; curve?: number } = {},
+  { max = 4.6, curve = 0.8 }: { max?: number; curve?: number } = {},
 ): Weighting {
   const counts = [...degrees.values()];
   const busiest = counts.length ? Math.max(...counts) : 0;
