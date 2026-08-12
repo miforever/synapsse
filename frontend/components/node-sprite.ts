@@ -12,8 +12,12 @@
  */
 
 import {
+  BufferGeometry,
   CanvasTexture,
+  Float32BufferAttribute,
   Group,
+  LineBasicMaterial,
+  LineSegments,
   Mesh,
   MeshBasicMaterial,
   SphereGeometry,
@@ -35,6 +39,8 @@ interface Entry {
   /** Size multiplier from how connected this memory is — see lib/node-scale. */
   weight: number;
   sprite: Sprite;
+  /** The globe's wires - real geometry, so they turn with the scene. */
+  wire: LineSegments;
   label: SpriteText;
   type: string;
   bright?: SpriteMaterial;
@@ -84,7 +90,7 @@ function discTexture(color: string): CanvasTexture | null {
   const cached = classTextures.get(color);
   if (cached) return cached;
 
-  const canvas = glowCanvas(color);
+  const canvas = glowCanvas(color, false);
   if (!canvas) return null;
 
   const texture = new CanvasTexture(canvas);
@@ -144,6 +150,9 @@ export function setSpriteTheme(theme: "dark" | "light"): void {
     entry.bright?.dispose();
     entry.bright = undefined;
     entry.sprite.material = classMaterial(entry.type);
+    // The light disc is deliberately a flat token with a clean edge rather
+    // than a body with depth, and a wireframe globe is not part of that idea.
+    entry.wire.visible = theme === "dark";
   });
   // Labels already in the scene are restyled in place — rebuilding them would
   // drop every node's settled position.
@@ -211,12 +220,23 @@ export function buildNodeObject(
   label.raycast = () => undefined;
   group.add(label);
 
+  // Sized to the sprite's visible shell, so the wires sit on the surface the
+  // glow draws rather than floating inside it or hanging off it.
+  const wire = new LineSegments(wireGeometries[wireTier(weight)], wireMaterial);
+  wire.scale.setScalar(nodeRadius(weight));
+  wire.visible = spriteTheme === "dark";
+  // The invisible hit sphere is the click target; a wire that raycast too
+  // would take the hover on its own far side.
+  wire.raycast = () => undefined;
+  group.add(wire);
+
   group.add(new Mesh(hitGeometry, hitMaterial));
 
   objects.set(node.id, {
     group,
     weight,
     sprite,
+    wire,
     label,
     type: node.type,
     targetScale: BASE_SCALE * weight,
@@ -286,6 +306,7 @@ const HALO_OPACITY = 0.9;
  */
 const HIT_RADIUS = 7;
 const hitGeometry = new SphereGeometry(HIT_RADIUS, 8, 6);
+
 const hitMaterial = new MeshBasicMaterial({
   transparent: true,
   opacity: 0,
@@ -293,6 +314,148 @@ const hitMaterial = new MeshBasicMaterial({
 });
 
 const BASE_SCALE = 7;
+
+/*
+ * The globe's wires, as geometry rather than paint.
+ *
+ * A sprite always faces the camera, so a grid drawn into its texture is welded
+ * to the view: orbiting slides it across the node instead of turning it, and
+ * the node reads as a sticker rather than a body. A sphere has no such problem
+ * - its meridians go round the back, and the far side shows through the near
+ * one, which is what a projection does.
+ *
+ * One geometry and one material for the entire graph. The mesh per node is a
+ * pointer to both, so a thousand memories cost a thousand transforms rather
+ * than a thousand spheres.
+ */
+/*
+ * Wires in proportion to the memory wearing them.
+ *
+ * One grid for every node is wrong at both ends: the count that reads as a
+ * globe on a hub collapses into a smudge on a leaf a fifth of its size, and the
+ * count that keeps a leaf legible leaves a hub looking faceted up close. Lines
+ * are what the surface is made of here, so their spacing should stay roughly
+ * constant on screen, which means their number goes with the radius.
+ *
+ * Tiers rather than a formula per node, because the geometry is shared: four
+ * cover the whole range a graph produces, and a thousand memories still
+ * allocate four between them.
+ */
+const WIRE_TIERS = [
+  { until: 1.8, meridians: 6, parallels: 5 },
+  { until: 2.8, meridians: 8, parallels: 7 },
+  { until: 3.8, meridians: 10, parallels: 9 },
+  { until: Infinity, meridians: 12, parallels: 11 },
+];
+
+/**
+ * The lines of a globe, as lines.
+ *
+ * Not a wireframe sphere. `wireframe: true` draws the edges of the triangles a
+ * sphere is built from, which means the diagonal across every quad as well -
+ * so the node arrives wearing a fishing net instead of a graticule, and no
+ * amount of thinning the lines fixes something that is drawing the wrong ones.
+ *
+ * These are circles: each meridian a great circle through both poles, each
+ * parallel a ring at its own latitude. Emitted as segment pairs for
+ * `LineSegments`, which is one draw call for the whole cage.
+ */
+function graticuleGeometry(
+  meridians: number,
+  parallels: number,
+  resolution = 64,
+): BufferGeometry {
+  const points: number[] = [];
+
+  const push = (
+    ax: number, ay: number, az: number,
+    bx: number, by: number, bz: number,
+  ) => points.push(ax, ay, az, bx, by, bz);
+
+  // A great circle through the poles covers two meridians at once, the near
+  // side and the far, so half a turn of longitude draws the whole globe.
+  for (let m = 0; m < meridians; m += 1) {
+    const longitude = (Math.PI * m) / meridians;
+    const cos = Math.cos(longitude);
+    const sin = Math.sin(longitude);
+
+    for (let i = 0; i < resolution; i += 1) {
+      const a = (Math.PI * 2 * i) / resolution;
+      const b = (Math.PI * 2 * (i + 1)) / resolution;
+      push(
+        cos * Math.sin(a), Math.cos(a), sin * Math.sin(a),
+        cos * Math.sin(b), Math.cos(b), sin * Math.sin(b),
+      );
+    }
+  }
+
+  // Parallels are spaced across the hemispheres rather than from the equator
+  // up, so the ring at the equator is always one of them.
+  for (let p = 1; p <= parallels; p += 1) {
+    const latitude = -Math.PI / 2 + (Math.PI * p) / (parallels + 1);
+    const y = Math.sin(latitude);
+    const radius = Math.cos(latitude);
+
+    for (let i = 0; i < resolution; i += 1) {
+      const a = (Math.PI * 2 * i) / resolution;
+      const b = (Math.PI * 2 * (i + 1)) / resolution;
+      push(
+        radius * Math.cos(a), y, radius * Math.sin(a),
+        radius * Math.cos(b), y, radius * Math.sin(b),
+      );
+    }
+  }
+
+  const geometry = new BufferGeometry();
+  geometry.setAttribute("position", new Float32BufferAttribute(points, 3));
+  return geometry;
+}
+
+const wireGeometries = WIRE_TIERS.map(({ meridians, parallels }) =>
+  graticuleGeometry(meridians, parallels),
+);
+
+function wireTier(weight: number): number {
+  const index = WIRE_TIERS.findIndex((tier) => weight < tier.until);
+  return index === -1 ? WIRE_TIERS.length - 1 : index;
+}
+
+const WIRE_OPACITY = 0.16;
+const wireMaterial = new LineBasicMaterial({
+  color: 0xffffff,
+  transparent: true,
+  opacity: WIRE_OPACITY,
+  // Never occludes: the node it wraps is a transparent sprite that writes no
+  // depth of its own, and a wire that did would carve holes in whatever is
+  // drawn after it.
+  depthWrite: false,
+});
+
+/*
+ * A second copy for the memories that are lit.
+ *
+ * The first rides the dimming, the way the shared class materials do. Without
+ * this the focused node would be the one thing on screen whose disc came up
+ * bright while its own wires faded out with the crowd - which is the opposite
+ * of what focusing is for. Two materials for any graph, not two per node.
+ */
+const wireBright = wireMaterial.clone();
+
+/**
+ * How much of a node's sprite is actually the node.
+ *
+ * The texture is mostly empty: the shell's silhouette sits at 0.44 of the
+ * texture's half-width, and everything past it is bloom fading to nothing. So
+ * the visible edge of a node is a quarter of the way out from its centre, not
+ * half - which is what anything measuring against a node on screen has to use,
+ * or it will clear a boundary the eye cannot see.
+ */
+const VISIBLE_RATIO = 0.22;
+
+/** The drawn radius of a memory, in world units, at a given weight. */
+export function nodeRadius(weight: number): number {
+  return BASE_SCALE * weight * VISIBLE_RATIO;
+}
 // Neighbours sit between the focus and the background so the local
 // neighbourhood reads as a group rather than as slightly-less-dim noise.
 const NEIGHBOUR_SCALE = 13;
@@ -374,26 +537,44 @@ function restyle(): void {
     if (lit || (focusing && highlighted)) {
       if (!entry.bright) entry.bright = classMaterial(entry.type).clone();
       entry.sprite.material = entry.bright;
+      entry.wire.material = wireBright;
       // A hovered node reads as fully lit even where focus had receded it —
       // that lift is the whole signal that the pointer has found something.
       entry.targetOpacity = lit || isFocus ? 1 : NEIGHBOUR_OPACITY;
     } else {
       entry.sprite.material = classMaterial(entry.type);
+      entry.wire.material = wireMaterial;
       entry.targetOpacity = focusing ? DIM_OPACITY : 1;
     }
 
+    /*
+     * The lift is damped by connectedness rather than multiplied by it.
+     *
+     * Resting size goes with weight outright, which is the point of sizing at
+     * all. Opening a memory already multiplies that by well over two, and both
+     * applied in full puts a hub across most of the viewport - it stops being a
+     * memory you opened and becomes a wall you are standing against. Rooted, so
+     * the busiest memory still opens larger than a leaf, by a margin you read
+     * as emphasis instead of as a zoom.
+     */
+    const lift = Math.sqrt(entry.weight);
+
     const focusScale =
-      (isFocus
-        ? FOCUS_SCALE
+      isFocus
+        ? FOCUS_SCALE * lift
         : focusing && highlighted
-          ? NEIGHBOUR_SCALE
-          : BASE_SCALE) * entry.weight;
-    const hoverScale =
-      (isHover ? HOVER_SCALE : lit ? HOVER_NEIGHBOUR_SCALE : BASE_SCALE) *
-      entry.weight;
+          ? NEIGHBOUR_SCALE * lift
+          : BASE_SCALE * entry.weight;
+    const hoverScale = isHover
+      ? HOVER_SCALE * lift
+      : lit
+        ? HOVER_NEIGHBOUR_SCALE * lift
+        : BASE_SCALE * entry.weight;
     // The larger of the two, so hovering the open memory cannot shrink it.
     entry.targetScale = Math.max(focusScale, hoverScale);
 
+    // Shared geometry, so this is a pointer swap rather than a rebuild.
+    entry.wire.geometry = wireGeometries[wireTier(entry.weight)];
     entry.targetLabelOpacity = lit || !focusing || highlighted ? 1 : DIM_OPACITY;
   });
 
@@ -441,11 +622,18 @@ function startFocusTween(): void {
       material.opacity = next;
     });
 
+    const wireWanted = dimTarget * WIRE_OPACITY;
+    const nextWire =
+      wireMaterial.opacity + (wireWanted - wireMaterial.opacity) * EASE;
+    if (Math.abs(wireWanted - nextWire) > EPSILON * WIRE_OPACITY) settled = false;
+    wireMaterial.opacity = nextWire;
+
     objects.forEach((entry) => {
       const scale = entry.sprite.scale.x;
       const nextScale = scale + (entry.targetScale - scale) * EASE;
       if (Math.abs(entry.targetScale - nextScale) > EPSILON) settled = false;
       entry.sprite.scale.set(nextScale, nextScale, 1);
+      entry.wire.scale.setScalar(nextScale * VISIBLE_RATIO);
       entry.label.center.setY(labelAnchor(nextScale));
 
       if (entry.bright && entry.sprite.material === entry.bright) {
@@ -509,6 +697,7 @@ export function applyWeights(weightOf: (id: string) => number): void {
 
 /** Frees GPU resources when the canvas unmounts. */
 export function disposeSpriteCache(): void {
+  wireGeometries.forEach((geometry) => geometry.dispose());
   classMaterials.forEach((material) => material.dispose());
   classTextures.forEach((texture) => texture.dispose());
   ringTextures.forEach((texture) => texture.dispose());

@@ -18,10 +18,102 @@ export function setGlowTheme(next: "dark" | "light"): void {
   theme = next;
 }
 
-export const GLOW_SIZE = 128;
+/*
+ * Big enough to be zoomed into.
+ *
+ * A hub fills a few hundred pixels with the camera close, and at 128 the
+ * texture was blown up four times over - every line in it a soft fat band. The
+ * grid is only worth drawing at a weight the eye reads as a wire, and a wire
+ * that thin does not survive being drawn small and stretched. One allocation
+ * per class colour, cached like everything else here.
+ */
+export const GLOW_SIZE = 512;
 
-export function glowCanvas(color: string): HTMLCanvasElement | null {
-  const key = `${theme}:${color}`;
+/** Tilt toward the viewer. Straight on, every parallel is a flat line and the
+ *  node is a striped disc rather than a sphere. */
+const TILT = 0.34;
+
+/** Degrees off the centre line, stopping short of the pole where the lines
+ *  converge into a solid cap anyway. */
+const STEPS = [15, 30, 45, 60, 75];
+
+/**
+ * A globe's wireframe, drawn inside a node: meridians sharing the poles,
+ * parallels crowding as they climb. Few lines on purpose - this is 128px and
+ * seen at a fraction of it, and a full graticule shrinks into haze.
+ *
+ * Built once per colour, like the disc it sits in, so it costs nothing per
+ * frame.
+ */
+function graticule(
+  ctx: CanvasRenderingContext2D,
+  centre: number,
+  radius: number,
+): void {
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(centre, centre, radius, 0, Math.PI * 2);
+  ctx.clip();
+
+  // White, not the memory's hue: the body is already near full colour, so a
+  // grid in that same hue has nothing to be brighter than.
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.2)";
+  ctx.lineWidth = GLOW_SIZE * 0.0026;
+
+  // Meridians every 15 degrees. Each ellipse is a pair, east and west of the
+  // one facing you, so five draws make eleven lines.
+  for (const longitude of STEPS.map((d) => (d * Math.PI) / 180)) {
+    ctx.beginPath();
+    ctx.ellipse(
+      centre,
+      centre,
+      radius * Math.sin(longitude),
+      radius,
+      0,
+      0,
+      Math.PI * 2,
+    );
+    ctx.stroke();
+  }
+
+  // The one facing you has no width left to be an ellipse.
+  ctx.beginPath();
+  ctx.moveTo(centre, centre - radius);
+  ctx.lineTo(centre, centre + radius);
+  ctx.stroke();
+
+  // Parallels: each at the height of its latitude, as wide as the sphere is
+  // there - which is what crowds them toward the poles instead of stacking
+  // them like rungs.
+  for (const latitude of [0, ...STEPS, ...STEPS.map((d) => -d)].map(
+    (d) => (d * Math.PI) / 180,
+  )) {
+    const width = radius * Math.cos(latitude);
+    ctx.beginPath();
+    ctx.ellipse(
+      centre,
+      centre - radius * Math.sin(latitude) * Math.cos(TILT),
+      width,
+      width * Math.sin(TILT),
+      0,
+      0,
+      Math.PI * 2,
+    );
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+/**
+ * @param grid Draw the globe's wires into the texture. True for the flat
+ *   canvas, where a node cannot turn and a painted grid is the only grid there
+ *   can be. False in 3D, where the wires are a real sphere in the scene - a
+ *   sprite always faces the camera, so a grid painted into one is stuck to the
+ *   view and slides with it instead of turning with the node.
+ */
+export function glowCanvas(color: string, grid = true): HTMLCanvasElement | null {
+  const key = `${theme}:${color}:${grid}`;
   const cached = cache.get(key);
   if (cached) return cached;
 
@@ -58,18 +150,42 @@ export function glowCanvas(color: string): HTMLCanvasElement | null {
     ctx.arc(half, half, radius - ctx.lineWidth / 2, 0, Math.PI * 2);
     ctx.stroke();
   } else {
-    // A bright core that holds its colour, then a long falloff so nodes bloom
-    // into the background rather than ending on a hard edge.
+    /*
+     * A hologram, not a bead.
+     *
+     * Brightest at the centre is the profile of a lit ball, and reads as a
+     * shiny object. A projected sphere is brightest at the limb, where the line
+     * of sight runs along the shell instead of crossing it. No specular
+     * anywhere: a shine is an off-centre white blob, and every stop here is the
+     * memory's own hue, symmetrical.
+     */
     const gradient = ctx.createRadialGradient(half, half, 0, half, half, half);
-    gradient.addColorStop(0, color);
-    gradient.addColorStop(0.25, color);
-    gradient.addColorStop(0.5, `${color}66`);
+    // Lit all the way through - hollowing the middle turns the node into a ring
+    // with a hole in it.
+    gradient.addColorStop(0, `${color}9E`);
+    gradient.addColorStop(0.18, `${color}8F`);
+    // The limb, lifted only a little: push it and the sphere becomes a neon
+    // ring, which is the loudest thing on a dark canvas.
+    gradient.addColorStop(0.4, `${color}E0`);
+    gradient.addColorStop(0.5, `${color}5C`);
+    // Bloom, so it sits in the scene rather than being cut out of it.
+    gradient.addColorStop(0.72, `${color}1A`);
     gradient.addColorStop(1, "rgba(0,0,0,0)");
 
     ctx.fillStyle = gradient;
     ctx.beginPath();
     ctx.arc(half, half, half, 0, Math.PI * 2);
     ctx.fill();
+
+    // A gradient has no edge, it just runs out, and a node without one is a
+    // smudge. Faint enough to be a boundary rather than an outline.
+    ctx.strokeStyle = `${color}59`;
+    ctx.lineWidth = GLOW_SIZE * 0.014;
+    ctx.beginPath();
+    ctx.arc(half, half, half * 0.44, 0, Math.PI * 2);
+    ctx.stroke();
+
+    if (grid) graticule(ctx, half, half * 0.44);
   }
 
   cache.set(key, canvas);

@@ -137,9 +137,51 @@ export function SearchPanel({
     const needle = tagQuery.trim().toLowerCase();
     if (!needle) return tags;
     return tags.filter(
-      (tag) => tag.name.toLowerCase().includes(needle) || activeTags.has(tag.name),
+      (tag) =>
+        tag.name.toLowerCase().includes(needle) || activeTags.has(tag.name),
     );
   }, [tags, tagQuery, activeTags]);
+
+  /*
+   * Collapsed to a button until it is wanted.
+   *
+   * Open, this covers a quarter of the canvas - the part of the graph nearest
+   * the corner it is anchored to, which is graph you cannot see while you are
+   * deciding what to search for.
+   */
+  const [open, setOpen] = useState(false);
+  const container = useRef<HTMLDivElement>(null);
+  const input = useRef<HTMLInputElement>(null);
+  // Held open a moment past the collapse, then taken out of the page: a panel
+  // clipped to a circle still holds a focusable input, and tabbing into one is
+  // a trap with no way out.
+  const [hidden, setHidden] = useState(true);
+
+  useEffect(() => {
+    if (!open) return;
+    setHidden(false);
+    input.current?.focus();
+
+    const onPointerDown = (event: PointerEvent) => {
+      if (!container.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+
+    document.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  // Filters outlive the panel that set them, and a graph quietly missing half
+  // its memories with nothing on screen to say why is the one way this gets
+  // worse rather than better.
+  const filtering =
+    query.trim().length > 0 || activeClasses.size > 0 || activeTags.size > 0;
 
   const listRef = useRef<HTMLDivElement>(null);
   const [maxHeight, setMaxHeight] = useState<number | undefined>();
@@ -165,136 +207,188 @@ export function SearchPanel({
   }, [visibleTags]);
 
   return (
-    <div className="glass-panel absolute right-5 top-5 z-20 w-80 rounded-[28px] p-4">
-      <div className="relative">
-        <SearchIcon className="pointer-events-none absolute left-3.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-faint" />
-        <input
-          value={query}
-          onChange={(event) => onQueryChange(event.target.value)}
-          placeholder="Search memories…"
-          aria-label="Search memories"
-          className="w-full rounded-full border border-line/[.12] bg-elevated/[.08] py-2 pl-10 pr-4 text-sm text-strong placeholder:text-faint/70 focus:border-cyan/40 focus:outline-none"
-        />
-      </div>
-
-      <AnimatePresence>
-        {query.trim() && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            className="overflow-hidden"
-          >
-            <ul className="mt-2 max-h-64 space-y-0.5 overflow-y-auto">
-              {results.map((result: NodeSearchResult) => (
-                <li key={result.id}>
-                  <button
-                    type="button"
-                    onClick={() => onSelectResult(result.id)}
-                    className="w-full rounded-[14px] px-2 py-1.5 text-left transition hover:bg-elevated/10"
-                  >
-                    <span className="flex items-center gap-1.5">
-                      <span
-                        className="h-1.5 w-1.5 shrink-0 rounded-full"
-                        style={{ backgroundColor: colorForClass(result.type, theme) }}
-                      />
-                      <span className="truncate text-xs text-strong">
-                        {result.title}
-                      </span>
-                    </span>
-                    <span className="mt-0.5 block truncate pl-3 text-[10px] text-faint">
-                      {result.summary}
-                    </span>
-                  </button>
-                </li>
-              ))}
-
-              {!searching && results.length === 0 && (
-                <li className="px-2 py-1.5 font-mono text-[10px] text-faint/70">
-                  no matches
-                </li>
-              )}
-            </ul>
-          </motion.div>
+    <motion.div
+      ref={container}
+      /*
+       * One object that changes shape, not two that swap.
+       *
+       * Anchored by its top-right corner, so the circle sits exactly where the
+       * panel's corner will be and the panel grows down and to the left out of
+       * it - the button becomes the panel rather than being replaced by it.
+       */
+      initial={false}
+      animate={{
+        width: open ? 320 : 44,
+        height: open ? "auto" : 44,
+        borderRadius: open ? 28 : 22,
+      }}
+      onAnimationComplete={() => {
+        if (!open) setHidden(true);
+      }}
+      transition={{ type: "spring", stiffness: 300, damping: 32, mass: 0.8 }}
+      className="glass-panel absolute right-5 top-5 z-20 overflow-hidden"
+    >
+      <motion.button
+        type="button"
+        onClick={() => setOpen(true)}
+        aria-label="Search memories"
+        aria-expanded={open}
+        animate={{ opacity: open ? 0 : 1 }}
+        transition={{ duration: 0.12 }}
+        style={{ pointerEvents: open ? "none" : "auto" }}
+        className="absolute right-0 top-0 grid h-11 w-11 place-items-center text-muted transition-colors hover:text-strong"
+      >
+        <SearchIcon className="h-4 w-4" />
+        {filtering && (
+          <span className="absolute right-2.5 top-2.5 h-1.5 w-1.5 rounded-full bg-cyan shadow-[0_0_8px_1px_rgb(var(--accent)/60%)]" />
         )}
-      </AnimatePresence>
+      </motion.button>
 
-      {classes.length > 0 && (
-        <div className="mt-3 border-t border-line/[.12] pt-3">
-          <SectionLabel>Class</SectionLabel>
-          <div className="mt-2 flex flex-wrap gap-1">
-            {classes.map((name) => (
-              <Chip
-                key={name}
-                label={labelForClass(name)}
-                color={colorForClass(name, theme)}
-                active={activeClasses.has(name)}
-                onClick={() => onToggleClass(name)}
-              />
-            ))}
-          </div>
+      <motion.div
+        animate={{ opacity: open ? 1 : 0 }}
+        // Late in, early out: the contents arrive once there is room for them,
+        // and leave before the shape starts closing over them.
+        transition={{ duration: 0.16, delay: open ? 0.1 : 0 }}
+        style={{
+          pointerEvents: open ? "auto" : "none",
+          visibility: hidden ? "hidden" : "visible",
+        }}
+        className="w-80 p-4"
+        aria-hidden={!open}
+      >
+        <div className="relative">
+          <SearchIcon className="pointer-events-none absolute left-3.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-faint" />
+          <input
+            ref={input}
+            value={query}
+            onChange={(event) => onQueryChange(event.target.value)}
+            placeholder="Search memories…"
+            aria-label="Search memories"
+            className="w-full rounded-full border border-line/[.12] bg-elevated/[.08] py-2 pl-10 pr-4 text-sm text-strong placeholder:text-faint/70 focus:border-cyan/40 focus:outline-none"
+          />
         </div>
-      )}
 
-      {tags.length > 0 && (
-        <div className="mt-3 border-t border-line/[.12] pt-3">
-          <div className="flex items-center gap-2">
-            <SectionLabel>Tags</SectionLabel>
-            <span className="font-mono text-[9px] text-faint/60">
-              {tagQuery.trim()
-                ? `${visibleTags.length}/${tags.length}`
-                : tags.length}
-            </span>
-            {tags.length > TAG_FILTER_THRESHOLD && (
-              <div className="relative ml-auto">
-                <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 h-2.5 w-2.5 -translate-y-1/2 text-faint" />
-                <input
-                  value={tagQuery}
-                  onChange={(event) => setTagQuery(event.target.value)}
-                  placeholder="filter"
-                  aria-label="Filter tags"
-                  className="w-32 rounded-full border border-line/[.12] bg-elevated/[.08] py-1 pl-6 pr-3 font-mono text-[10px] text-strong placeholder:text-faint/60 focus:border-cyan/40 focus:outline-none"
-                />
-              </div>
-            )}
-          </div>
-
-          <div className="relative mt-2 rounded-[20px] bg-elevated/[.04] p-2">
-            <div
-              ref={listRef}
-              style={{ maxHeight }}
-              className={`scroll-slim overflow-y-auto overscroll-contain pr-1 ${
-                scrollable
-                  ? "[mask-image:linear-gradient(to_bottom,#000_calc(100%-0.5rem),transparent)]"
-                  : ""
-              }`}
+        <AnimatePresence>
+          {query.trim() && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              className="overflow-hidden"
             >
-              <div className="flex flex-wrap gap-1">
-                {visibleTags.map((tag) => (
-                  <Chip
-                    key={tag.name}
-                    label={`#${tag.name}`}
-                    active={activeTags.has(tag.name)}
-                    onClick={() => onToggleTag(tag.name)}
-                  />
+              <ul className="mt-2 max-h-64 space-y-0.5 overflow-y-auto">
+                {results.map((result: NodeSearchResult) => (
+                  <li key={result.id}>
+                    <button
+                      type="button"
+                      onClick={() => onSelectResult(result.id)}
+                      className="w-full rounded-[14px] px-2 py-1.5 text-left transition hover:bg-elevated/10"
+                    >
+                      <span className="flex items-center gap-1.5">
+                        <span
+                          className="h-1.5 w-1.5 shrink-0 rounded-full"
+                          style={{
+                            backgroundColor: colorForClass(result.type, theme),
+                          }}
+                        />
+                        <span className="truncate text-xs text-strong">
+                          {result.title}
+                        </span>
+                      </span>
+                      <span className="mt-0.5 block truncate pl-3 text-[10px] text-faint">
+                        {result.summary}
+                      </span>
+                    </button>
+                  </li>
                 ))}
 
-                {visibleTags.length === 0 && (
-                  <span className="px-1 py-1 font-mono text-[10px] text-faint/70">
-                    no tags match
-                  </span>
+                {!searching && results.length === 0 && (
+                  <li className="px-2 py-1.5 font-mono text-[10px] text-faint/70">
+                    no matches
+                  </li>
                 )}
+              </ul>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {classes.length > 0 && (
+          <div className="mt-3 border-t border-line/[.12] pt-3">
+            <SectionLabel>Class</SectionLabel>
+            <div className="mt-2 flex flex-wrap gap-1">
+              {classes.map((name) => (
+                <Chip
+                  key={name}
+                  label={labelForClass(name)}
+                  color={colorForClass(name, theme)}
+                  active={activeClasses.has(name)}
+                  onClick={() => onToggleClass(name)}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {tags.length > 0 && (
+          <div className="mt-3 border-t border-line/[.12] pt-3">
+            <div className="flex items-center gap-2">
+              <SectionLabel>Tags</SectionLabel>
+              <span className="font-mono text-[9px] text-faint/60">
+                {tagQuery.trim()
+                  ? `${visibleTags.length}/${tags.length}`
+                  : tags.length}
+              </span>
+              {tags.length > TAG_FILTER_THRESHOLD && (
+                <div className="relative ml-auto">
+                  <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 h-2.5 w-2.5 -translate-y-1/2 text-faint" />
+                  <input
+                    value={tagQuery}
+                    onChange={(event) => setTagQuery(event.target.value)}
+                    placeholder="filter"
+                    aria-label="Filter tags"
+                    className="w-32 rounded-full border border-line/[.12] bg-elevated/[.08] py-1 pl-6 pr-3 font-mono text-[10px] text-strong placeholder:text-faint/60 focus:border-cyan/40 focus:outline-none"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="relative mt-2 rounded-[20px] bg-elevated/[.04] p-2">
+              <div
+                ref={listRef}
+                style={{ maxHeight }}
+                className={`scroll-slim overflow-y-auto overscroll-contain pr-1 ${
+                  scrollable
+                    ? "[mask-image:linear-gradient(to_bottom,#000_calc(100%-0.5rem),transparent)]"
+                    : ""
+                }`}
+              >
+                <div className="flex flex-wrap gap-1">
+                  {visibleTags.map((tag) => (
+                    <Chip
+                      key={tag.name}
+                      label={`#${tag.name}`}
+                      active={activeTags.has(tag.name)}
+                      onClick={() => onToggleTag(tag.name)}
+                    />
+                  ))}
+
+                  {visibleTags.length === 0 && (
+                    <span className="px-1 py-1 font-mono text-[10px] text-faint/70">
+                      no tags match
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {matchCount !== null && (
-        <p className="mt-3 font-mono text-[10px] text-faint">
-          {matchCount} shown · filters active
-        </p>
-      )}
-    </div>
+        {matchCount !== null && (
+          <p className="mt-3 font-mono text-[10px] text-faint">
+            {matchCount} shown · filters active
+          </p>
+        )}
+      </motion.div>
+    </motion.div>
   );
 }

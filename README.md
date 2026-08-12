@@ -59,11 +59,16 @@ Clone it:
 git clone https://github.com/miforever/synapsse.git && cd synapsse
 ```
 
-Docker — brings up both services:
+Docker — brings up both services in the background:
 
 ```bash
-docker compose -f docker/docker-compose.yml up --build
+docker compose -f docker/docker-compose.yml up --build -d
 ```
+
+They are `unless-stopped`, so they come back whenever Docker does — on macOS
+and Windows that means letting Docker Desktop start at login. Follow the first
+start with `docker compose -f docker/docker-compose.yml logs -f`, and stop them
+with `... down`.
 
 Or run them natively:
 

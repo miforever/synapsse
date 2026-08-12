@@ -31,7 +31,7 @@ import type { PositionedNode } from "./force-graph";
 import { endpointId, type GraphEdge } from "./types";
 
 /** Resting length of a connection between two average memories. */
-export const LINK_DISTANCE = 68;
+export const LINK_DISTANCE = 104;
 
 /** How hard a spring pulls per iteration. Above ~0.5 the solver oscillates. */
 const LINK_STRENGTH = 0.35;
@@ -43,8 +43,8 @@ const LINK_STRENGTH = 0.35;
  * memories sit far apart with the links stretched between them, which is the
  * sprawl this is meant to fix. Kept just high enough to open up a crowd.
  */
-const REPULSION = 90;
-const REPULSION_RANGE = 165;
+const REPULSION = 130;
+const REPULSION_RANGE = 210;
 
 /**
  * The same range, shortened once the graph is dense enough for it to matter.
@@ -63,9 +63,11 @@ function rangeFor(nodeCount: number): number {
  * Clear space around a memory, before its own size is added.
  *
  * This is the floor nothing may cross, so it is what guarantees a label has
- * somewhere to sit even where the graph is at its most crowded.
+ * somewhere to sit even where the graph is at its most crowded - and a label
+ * is several times wider than the disc it hangs under, which is why the floor
+ * is generous rather than snug.
  */
-const COLLIDE_PADDING = 24;
+const COLLIDE_PADDING = 52;
 
 /** Pull toward the centroid, which is the only thing keeping it compact. */
 const CENTERING = 0.012;
@@ -98,7 +100,7 @@ function budget(nodeCount: number): number {
 }
 
 export interface UntangledLayout {
-  positions: Map<string, { x: number; y: number }>;
+  positions: Map<string, { x: number; y: number; z: number }>;
   /** Distance from the origin to the furthest memory, for framing. */
   radius: number;
 }
@@ -107,11 +109,30 @@ interface Body {
   id: string;
   x: number;
   y: number;
+  z: number;
   /** Half the space this memory needs, derived from how connected it is. */
   size: number;
   /** Heavier hubs move less, so a spoke swings around the hub, not the other
    *  way round - the same reason the renderer draws them bigger. */
   weight: number;
+}
+
+/**
+ * Whether the graph being laid out is the one drawn in space.
+ *
+ * Asked of the nodes rather than passed down from the route: the 3D renderer
+ * is what puts a `z` on them, so the nodes already know, and threading a flag
+ * from the router through the bar and two hooks would only be a second source
+ * of the same truth waiting to disagree.
+ *
+ * Everything below is written in three dimensions regardless. In a flat graph
+ * every body starts at `z = 0`, and since every force acts along the vector
+ * between two bodies, no z difference is ever created - the third dimension
+ * stays exactly zero on its own rather than by special-casing. The 2D
+ * arrangement is unchanged, to the last decimal.
+ */
+export function isSpatial(nodes: PositionedNode[]): boolean {
+  return nodes.some((node) => node.z !== undefined);
 }
 
 export function degreesOf(links: GraphEdge[]): Map<string, number> {
@@ -145,7 +166,7 @@ function repel(bodies: Body[], alpha: number, range: number): void {
   const buckets = new Map<string, Body[]>();
 
   for (const body of bodies) {
-    const key = `${Math.floor(body.x / cell)},${Math.floor(body.y / cell)}`;
+    const key = `${Math.floor(body.x / cell)},${Math.floor(body.y / cell)},${Math.floor(body.z / cell)}`;
     const bucket = buckets.get(key);
     if (bucket) bucket.push(body);
     else buckets.set(key, [body]);
@@ -154,42 +175,51 @@ function repel(bodies: Body[], alpha: number, range: number): void {
   for (const body of bodies) {
     const gx = Math.floor(body.x / cell);
     const gy = Math.floor(body.y / cell);
+    const gz = Math.floor(body.z / cell);
 
     for (let ox = -1; ox <= 1; ox += 1) {
       for (let oy = -1; oy <= 1; oy += 1) {
-        const others = buckets.get(`${gx + ox},${gy + oy}`);
-        if (!others) continue;
+        for (let oz = -1; oz <= 1; oz += 1) {
+          const others = buckets.get(`${gx + ox},${gy + oy},${gz + oz}`);
+          if (!others) continue;
 
-        for (const other of others) {
-          // Each unordered pair is handled once, by the lower id.
-          if (other.id <= body.id) continue;
+          for (const other of others) {
+            // Each unordered pair is handled once, by the lower id.
+            if (other.id <= body.id) continue;
 
-          let dx = other.x - body.x;
-          let dy = other.y - body.y;
-          let distance = Math.hypot(dx, dy);
+            let dx = other.x - body.x;
+            let dy = other.y - body.y;
+            let dz = other.z - body.z;
+            let distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
-          // Exactly coincident memories have no direction to separate along,
-          // so one is nudged deterministically rather than left stacked.
-          if (distance === 0) {
-            dx = 0.01;
-            dy = 0;
-            distance = 0.01;
+            // Exactly coincident memories have no direction to separate along,
+            // so one is nudged deterministically rather than left stacked.
+            if (distance === 0) {
+              dx = 0.01;
+              dy = 0;
+              dz = 0;
+              distance = 0.01;
+            }
+            if (distance > range) continue;
+
+            const push = Math.min(
+              ((REPULSION * alpha) / (distance * distance)) * cell,
+              MAX_PUSH * alpha,
+            );
+            const ux = (dx / distance) * push;
+            const uy = (dy / distance) * push;
+            const uz = (dz / distance) * push;
+            const total = body.weight + other.weight;
+
+            // Split by weight, so the lighter of the two does more of the
+            // moving.
+            body.x -= (ux * other.weight) / total;
+            body.y -= (uy * other.weight) / total;
+            body.z -= (uz * other.weight) / total;
+            other.x += (ux * body.weight) / total;
+            other.y += (uy * body.weight) / total;
+            other.z += (uz * body.weight) / total;
           }
-          if (distance > range) continue;
-
-          const push = Math.min(
-            ((REPULSION * alpha) / (distance * distance)) * cell,
-            MAX_PUSH * alpha,
-          );
-          const ux = (dx / distance) * push;
-          const uy = (dy / distance) * push;
-          const total = body.weight + other.weight;
-
-          // Split by weight, so the lighter of the two does more of the moving.
-          body.x -= (ux * other.weight) / total;
-          body.y -= (uy * other.weight) / total;
-          other.x += (ux * body.weight) / total;
-          other.y += (uy * body.weight) / total;
         }
       }
     }
@@ -202,7 +232,7 @@ function separate(bodies: Body[]): void {
   const buckets = new Map<string, Body[]>();
 
   for (const body of bodies) {
-    const key = `${Math.floor(body.x / cell)},${Math.floor(body.y / cell)}`;
+    const key = `${Math.floor(body.x / cell)},${Math.floor(body.y / cell)},${Math.floor(body.z / cell)}`;
     const bucket = buckets.get(key);
     if (bucket) bucket.push(body);
     else buckets.set(key, [body]);
@@ -211,33 +241,41 @@ function separate(bodies: Body[]): void {
   for (const body of bodies) {
     const gx = Math.floor(body.x / cell);
     const gy = Math.floor(body.y / cell);
+    const gz = Math.floor(body.z / cell);
 
     for (let ox = -1; ox <= 1; ox += 1) {
       for (let oy = -1; oy <= 1; oy += 1) {
-        const others = buckets.get(`${gx + ox},${gy + oy}`);
-        if (!others) continue;
+        for (let oz = -1; oz <= 1; oz += 1) {
+          const others = buckets.get(`${gx + ox},${gy + oy},${gz + oz}`);
+          if (!others) continue;
 
-        for (const other of others) {
-          if (other.id <= body.id) continue;
+          for (const other of others) {
+            if (other.id <= body.id) continue;
 
-          const minimum = body.size + other.size + COLLIDE_PADDING;
-          let dx = other.x - body.x;
-          let dy = other.y - body.y;
-          let distance = Math.hypot(dx, dy);
-          if (distance === 0) {
-            dx = 0.01;
-            dy = 0;
-            distance = 0.01;
+            const minimum = body.size + other.size + COLLIDE_PADDING;
+            let dx = other.x - body.x;
+            let dy = other.y - body.y;
+            let dz = other.z - body.z;
+            let distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+            if (distance === 0) {
+              dx = 0.01;
+              dy = 0;
+              dz = 0;
+              distance = 0.01;
+            }
+            if (distance >= minimum) continue;
+
+            const overlap = (minimum - distance) / 2;
+            const ux = (dx / distance) * overlap;
+            const uy = (dy / distance) * overlap;
+            const uz = (dz / distance) * overlap;
+            body.x -= ux;
+            body.y -= uy;
+            body.z -= uz;
+            other.x += ux;
+            other.y += uy;
+            other.z += uz;
           }
-          if (distance >= minimum) continue;
-
-          const overlap = (minimum - distance) / 2;
-          const ux = (dx / distance) * overlap;
-          const uy = (dy / distance) * overlap;
-          body.x -= ux;
-          body.y -= uy;
-          other.x += ux;
-          other.y += uy;
         }
       }
     }
@@ -254,10 +292,23 @@ export function computeUntangledLayout(
   nodes: PositionedNode[],
   links: GraphEdge[],
 ): UntangledLayout {
-  const positions = new Map<string, { x: number; y: number }>();
+  const positions = new Map<string, { x: number; y: number; z: number }>();
   if (nodes.length === 0) return { positions, radius: 0 };
 
   const degrees = degreesOf(links);
+  const spatial = isSpatial(nodes);
+  /*
+   * Whether the graph in space has any depth to preserve yet.
+   *
+   * Starting from where things already are is the right instinct, but a 3D
+   * graph whose nodes all sit at one depth - a scene that has not been
+   * simulated yet, or one flattened by an earlier untangling - gives every
+   * body the same z, and no force here can invent a difference that is not
+   * there. It would settle into a perfect sheet and the press would look
+   * broken. Seeding depth in that case is the only way out of the plane.
+   */
+  const flattened =
+    spatial && nodes.every((node) => Math.abs(node.z ?? 0) < 1e-6);
 
   /*
    * Start from where things already are.
@@ -277,6 +328,20 @@ export function computeUntangledLayout(
       id: node.id,
       x: node.x ?? Math.cos(angle) * spiral,
       y: node.y ?? Math.sin(angle) * spiral,
+      /*
+       * Depth is kept in space and dropped on the flat canvas.
+       *
+       * A flat graph seeds every body at zero, and since no force below ever
+       * introduces a z difference where there is none, it stays a plane
+       * without being told to. In space, a memory that has never been drawn
+       * needs a depth that is not zero for the same reason it needs an x and a
+       * y: a sheet of new memories at one depth is a sheet repulsion can only
+       * spread sideways, which is precisely the flat fan this fixes.
+       */
+      z:
+        spatial && (flattened || node.z === undefined)
+          ? Math.sin(angle * 1.7) * spiral * 0.6
+          : (node.z ?? 0),
       size: sizeFor(degree),
       // Square-rooted, so a hub with thirty connections is heavier than a leaf
       // without being immovable.
@@ -312,10 +377,12 @@ export function computeUntangledLayout(
     for (const { source, target, rest } of springs) {
       let dx = target.x - source.x;
       let dy = target.y - source.y;
-      let distance = Math.hypot(dx, dy);
+      let dz = target.z - source.z;
+      let distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
       if (distance === 0) {
         dx = 0.01;
         dy = 0;
+        dz = 0;
         distance = 0.01;
       }
 
@@ -323,8 +390,10 @@ export function computeUntangledLayout(
       const total = source.weight + target.weight;
       source.x += dx * shift * (target.weight / total);
       source.y += dy * shift * (target.weight / total);
+      source.z += dz * shift * (target.weight / total);
       target.x -= dx * shift * (source.weight / total);
       target.y -= dy * shift * (source.weight / total);
+      target.z -= dz * shift * (source.weight / total);
     }
 
     repel(bodies, alpha, range);
@@ -339,16 +408,20 @@ export function computeUntangledLayout(
      */
     let cx = 0;
     let cy = 0;
+    let cz = 0;
     for (const body of bodies) {
       cx += body.x;
       cy += body.y;
+      cz += body.z;
     }
     cx /= bodies.length;
     cy /= bodies.length;
+    cz /= bodies.length;
 
     for (const body of bodies) {
       body.x += (cx - body.x) * CENTERING * alpha;
       body.y += (cy - body.y) * CENTERING * alpha;
+      body.z += (cz - body.z) * CENTERING * alpha;
     }
 
     separate(bodies);
@@ -357,19 +430,23 @@ export function computeUntangledLayout(
   // Centre the finished layout, so it arrives where the camera already is.
   let cx = 0;
   let cy = 0;
+  let cz = 0;
   for (const body of bodies) {
     cx += body.x;
     cy += body.y;
+    cz += body.z;
   }
   cx /= bodies.length;
   cy /= bodies.length;
+  cz /= bodies.length;
 
   let radius = 0;
   for (const body of bodies) {
     const x = body.x - cx;
     const y = body.y - cy;
-    positions.set(body.id, { x, y });
-    radius = Math.max(radius, Math.hypot(x, y));
+    const z = body.z - cz;
+    positions.set(body.id, { x, y, z });
+    radius = Math.max(radius, Math.sqrt(x * x + y * y + z * z));
   }
 
   return { positions, radius };
@@ -402,7 +479,7 @@ export const UNTANGLE_MS = 1100;
  */
 export function animateToLayout(
   nodes: PositionedNode[],
-  positions: Map<string, { x: number; y: number }>,
+  positions: Map<string, { x: number; y: number; z: number }>,
   { onFrame, onDone }: { onFrame?: () => void; onDone?: () => void } = {},
 ): () => void {
   const moving = nodes
@@ -413,6 +490,7 @@ export function animateToLayout(
         node,
         fromX: node.x ?? target.x,
         fromY: node.y ?? target.y,
+        fromZ: node.z ?? target.z,
         target,
       };
     })
@@ -441,7 +519,7 @@ export function animateToLayout(
     const t = Math.min((now - start) / UNTANGLE_MS, 1);
     const k = ease(t);
 
-    for (const { node, fromX, fromY, target } of moving) {
+    for (const { node, fromX, fromY, fromZ, target } of moving) {
       const x = fromX + (target.x - fromX) * k;
       const y = fromY + (target.y - fromY) * k;
       node.x = x;
@@ -449,15 +527,19 @@ export function animateToLayout(
       node.fx = x;
       node.fy = y;
       /*
-       * Flatten in 3D as well.
+       * Depth travels like everything else.
        *
-       * The arrangement is a plane, so a node arriving with its old depth
-       * still on it would sit off the surface and the whole thing would read
-       * as untidy from every angle but one.
+       * This used to ease `z` to zero unconditionally, because both
+       * arrangements were planes and a node keeping its old depth would have
+       * floated off the surface. Now the arrangement carries its own depth -
+       * zero for the flat canvas, a real one in space - so the node is moved
+       * to it rather than flattened onto a sheet, which is what made an
+       * untangled 3D graph a cardboard cut-out seen edge-on.
        */
       if (node.z !== undefined) {
-        node.z = node.z * (1 - k);
-        node.fz = node.z;
+        const z = fromZ + (target.z - fromZ) * k;
+        node.z = z;
+        node.fz = z;
       }
     }
 
