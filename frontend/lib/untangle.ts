@@ -31,7 +31,7 @@ import type { PositionedNode } from "./force-graph";
 import { endpointId, type GraphEdge } from "./types";
 
 /** Resting length of a connection between two average memories. */
-export const LINK_DISTANCE = 68;
+export const LINK_DISTANCE = 104;
 
 /** How hard a spring pulls per iteration. Above ~0.5 the solver oscillates. */
 const LINK_STRENGTH = 0.35;
@@ -43,8 +43,8 @@ const LINK_STRENGTH = 0.35;
  * memories sit far apart with the links stretched between them, which is the
  * sprawl this is meant to fix. Kept just high enough to open up a crowd.
  */
-const REPULSION = 90;
-const REPULSION_RANGE = 165;
+const REPULSION = 130;
+const REPULSION_RANGE = 210;
 
 /**
  * The same range, shortened once the graph is dense enough for it to matter.
@@ -63,9 +63,11 @@ function rangeFor(nodeCount: number): number {
  * Clear space around a memory, before its own size is added.
  *
  * This is the floor nothing may cross, so it is what guarantees a label has
- * somewhere to sit even where the graph is at its most crowded.
+ * somewhere to sit even where the graph is at its most crowded - and a label
+ * is several times wider than the disc it hangs under, which is why the floor
+ * is generous rather than snug.
  */
-const COLLIDE_PADDING = 24;
+const COLLIDE_PADDING = 52;
 
 /** Pull toward the centroid, which is the only thing keeping it compact. */
 const CENTERING = 0.012;

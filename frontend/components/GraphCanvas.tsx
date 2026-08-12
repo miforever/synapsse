@@ -206,7 +206,7 @@ interface Props {
  */
 const HOVER_RADIUS = 5.6;
 
-const LABEL_MAX_CHARS = 24;
+const LABEL_MAX_CHARS = 38;
 const MAX_LABEL_PX = 12;
 
 /**
