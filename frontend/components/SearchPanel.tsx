@@ -19,6 +19,11 @@ export interface TagOption {
  * its own; below it, the input would be furniture. */
 const TAG_FILTER_THRESHOLD = 12;
 
+/** How much of the vocabulary the well shows before it scrolls, in whole chip
+ * rows, and the `gap-1` between them in pixels. */
+const TAG_ROWS = 5;
+const TAG_ROW_GAP = 4;
+
 interface Props {
   query: string;
   onQueryChange: (query: string) => void;
@@ -134,18 +139,26 @@ export function SearchPanel({
     );
   }, [tags, tagQuery, activeTags]);
 
-  // The fade at the bottom edge is only honest when there is more below, so it
-  // is measured rather than guessed from the tag count: chip rows wrap at
-  // different widths and the panel would otherwise fade a list that ends.
+  // The well is sized to a whole number of chip rows, measured from a real
+  // chip rather than assumed: a list cut off mid-chip reads as a rendering
+  // fault, not as something you can scroll. The fade is likewise only applied
+  // when there is genuinely more below.
   const listRef = useRef<HTMLDivElement>(null);
+  const [maxHeight, setMaxHeight] = useState<number | undefined>();
   const [scrollable, setScrollable] = useState(false);
 
   useEffect(() => {
     const element = listRef.current;
     if (!element) return;
 
-    const measure = () =>
+    const measure = () => {
+      const chip = element.querySelector("button");
+      if (chip) {
+        const rowHeight = chip.getBoundingClientRect().height;
+        setMaxHeight(TAG_ROWS * rowHeight + (TAG_ROWS - 1) * TAG_ROW_GAP);
+      }
       setScrollable(element.scrollHeight > element.clientHeight + 1);
+    };
 
     measure();
     const observer = new ResizeObserver(measure);
@@ -166,7 +179,7 @@ export function SearchPanel({
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
-          className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-faint"
+          className="pointer-events-none absolute left-3.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-faint"
           aria-hidden="true"
         >
           <circle cx="11" cy="11" r="7" />
@@ -177,7 +190,7 @@ export function SearchPanel({
           onChange={(event) => onQueryChange(event.target.value)}
           placeholder="Search memories…"
           aria-label="Search memories"
-          className="w-full rounded-lg border border-line/[.12] bg-elevated/[.08] py-2 pl-9 pr-3 text-sm text-strong placeholder:text-faint/70 focus:border-cyan/40 focus:outline-none"
+          className="w-full rounded-full border border-line/[.12] bg-elevated/[.08] py-2 pl-10 pr-4 text-sm text-strong placeholder:text-faint/70 focus:border-cyan/40 focus:outline-none"
         />
       </div>
 
@@ -248,25 +261,34 @@ export function SearchPanel({
               refinement of the row beneath it. */}
           <div className="flex items-center gap-2">
             <SectionLabel>Tags</SectionLabel>
+            {/* The count is the only thing telling you the well holds more
+                than the rows on screen. Without it five rows read as the
+                whole vocabulary. */}
+            <span className="font-mono text-[9px] text-faint/60">
+              {tagQuery.trim()
+                ? `${visibleTags.length}/${tags.length}`
+                : tags.length}
+            </span>
             {tags.length > TAG_FILTER_THRESHOLD && (
               <input
                 value={tagQuery}
                 onChange={(event) => setTagQuery(event.target.value)}
                 placeholder="filter…"
                 aria-label="Filter tags"
-                className="ml-auto w-24 border-b border-transparent bg-transparent pb-px text-right font-mono text-[10px] text-muted placeholder:text-faint/60 focus:border-cyan/40 focus:outline-none"
+                className="ml-auto w-24 rounded-full border border-line/[.12] bg-elevated/[.08] px-2.5 py-0.5 text-right font-mono text-[10px] text-muted placeholder:text-faint/60 focus:border-cyan/40 focus:outline-none"
               />
             )}
           </div>
 
           {/* Recessed, so the long list reads as a well inside the panel
               rather than more of the same surface. */}
-          <div className="relative mt-2 rounded-lg bg-elevated/[.04] p-2">
+          <div className="relative mt-2 rounded-2xl bg-elevated/[.04] p-2.5">
             <div
               ref={listRef}
-              className={`max-h-40 overflow-y-auto overscroll-contain ${
+              style={{ maxHeight }}
+              className={`scroll-slim overflow-y-auto overscroll-contain pr-1 ${
                 scrollable
-                  ? "[mask-image:linear-gradient(to_bottom,#000_calc(100%-1.75rem),transparent)]"
+                  ? "[mask-image:linear-gradient(to_bottom,#000_calc(100%-0.5rem),transparent)]"
                   : ""
               }`}
             >
