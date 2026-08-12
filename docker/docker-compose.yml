@@ -7,6 +7,10 @@ services:
       dockerfile: docker/Dockerfile.backend
     ports:
       - "8000:8000"
+    # A memory store is only useful if it is there when an agent reaches for
+    # it, so both services come back with Docker after a reboot. `unless-stopped`
+    # rather than `always`: stopping it by hand should mean it stays stopped.
+    restart: unless-stopped
     volumes:
       - synapsse-data:/app/data
       # Survives container recreation so the model is fetched once.
@@ -26,6 +30,7 @@ services:
       dockerfile: docker/Dockerfile.frontend
     ports:
       - "3000:3000"
+    restart: unless-stopped
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8000
     depends_on:
