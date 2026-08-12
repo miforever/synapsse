@@ -215,7 +215,7 @@ export function NodeDrawer({
           className="glass-panel absolute right-0 top-0 z-30 flex h-full w-full max-w-md flex-col border-l"
         >
           {dropping && (
-            <div className="pointer-events-none absolute inset-2 z-40 flex items-center justify-center rounded-xl border-2 border-dashed border-cyan/50 bg-cyan/5">
+            <div className="pointer-events-none absolute inset-2 z-40 flex items-center justify-center rounded-[24px] border-2 border-dashed border-cyan/50 bg-cyan/5">
               <span className="font-mono text-xs uppercase tracking-[0.2em] text-cyan-200">
                 Attach to this memory
               </span>
@@ -277,7 +277,7 @@ export function NodeDrawer({
                 onClick={onClose}
                 aria-label="Close"
                 title="Close (Esc)"
-                className={`shrink-0 rounded-md px-2 py-1 font-mono text-xs transition hover:bg-elevated/10 hover:text-strong ${
+                className={`shrink-0 rounded-full px-2 py-1 font-mono text-xs transition hover:bg-elevated/10 hover:text-strong ${
                   cover
                     ? "absolute right-3 top-3 bg-elevated/20 text-strong backdrop-blur"
                     : "text-muted"
@@ -382,7 +382,7 @@ export function NodeDrawer({
                           <button
                             type="button"
                             onClick={() => onNavigate(otherId)}
-                            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition hover:bg-elevated/10"
+                            className="flex w-full items-center gap-2 rounded-[14px] px-2 py-1.5 text-left transition hover:bg-elevated/10"
                           >
                             <span
                               className="h-1.5 w-1.5 shrink-0 rounded-full"

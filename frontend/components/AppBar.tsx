@@ -176,7 +176,7 @@ export function AppBar() {
           pale scribble, so the plate travels with it rather than the mark
           being redrawn twice.
         */}
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#0A0814]">
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[10px] bg-[#0A0814]">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/branding/synapsse-mark.svg"
@@ -306,7 +306,7 @@ export function AppBar() {
 
       <div
         ref={container}
-        className="glass-panel absolute bottom-5 left-5 z-30 rounded-xl px-3 py-2"
+        className="glass-panel absolute bottom-5 left-5 z-30 rounded-full px-3 py-2"
       >
         {/* Opens upward, since this sits at the foot of the window. */}
         <SettingsPanel
@@ -351,7 +351,7 @@ export function AppBar() {
             aria-expanded={open}
             aria-label="Settings"
             title="Settings"
-            className={`rounded-lg px-2 py-1.5 text-base leading-none transition ${
+            className={`rounded-full px-2 py-1.5 text-base leading-none transition ${
               open
                 ? "bg-elevated/10 text-strong"
                 : "text-faint hover:text-muted"

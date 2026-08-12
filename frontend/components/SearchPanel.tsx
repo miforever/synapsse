@@ -165,7 +165,7 @@ export function SearchPanel({
   }, [visibleTags]);
 
   return (
-    <div className="glass-panel absolute right-5 top-5 z-20 w-80 rounded-[28px] p-5">
+    <div className="glass-panel absolute right-5 top-5 z-20 w-80 rounded-[28px] p-4">
       <div className="relative">
         <SearchIcon className="pointer-events-none absolute left-3.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-faint" />
         <input
@@ -191,7 +191,7 @@ export function SearchPanel({
                   <button
                     type="button"
                     onClick={() => onSelectResult(result.id)}
-                    className="w-full rounded-md px-2 py-1.5 text-left transition hover:bg-elevated/10"
+                    className="w-full rounded-[14px] px-2 py-1.5 text-left transition hover:bg-elevated/10"
                   >
                     <span className="flex items-center gap-1.5">
                       <span
@@ -259,7 +259,7 @@ export function SearchPanel({
             )}
           </div>
 
-          <div className="relative mt-2 rounded-[20px] bg-elevated/[.04] p-3">
+          <div className="relative mt-2 rounded-[20px] bg-elevated/[.04] p-2">
             <div
               ref={listRef}
               style={{ maxHeight }}

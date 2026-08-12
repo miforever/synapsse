@@ -35,7 +35,7 @@ export function DrawerSection({
         type="button"
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
-        className="flex w-full items-center justify-between rounded-md px-1 py-1.5 transition hover:bg-elevated/[.06]"
+        className="flex w-full items-center justify-between rounded-[12px] px-1 py-1.5 transition hover:bg-elevated/[.06]"
       >
         <span className="font-mono text-[9px] uppercase tracking-[0.2em] text-faint">
           {title}

@@ -25,7 +25,7 @@ export function HoverCard({ node, connections, x, y }: Props) {
           transition={{ duration: 0.12, ease: "easeOut" }}
           // Follows the cursor, so it must never eat the pointer itself.
           style={{ left: x + 16, top: y + 16 }}
-          className="glass-panel pointer-events-none absolute z-20 w-72 rounded-xl p-4"
+          className="glass-panel pointer-events-none absolute z-20 w-72 rounded-[28px] p-4"
         >
           <div className="flex items-center gap-2">
             <span
