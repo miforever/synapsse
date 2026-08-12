@@ -18,11 +18,24 @@ export function setGlowTheme(next: "dark" | "light"): void {
   theme = next;
 }
 
-export const GLOW_SIZE = 128;
+/*
+ * Big enough to be zoomed into.
+ *
+ * A hub fills a few hundred pixels with the camera close, and at 128 the
+ * texture was blown up four times over - every line in it a soft fat band. The
+ * grid is only worth drawing at a weight the eye reads as a wire, and a wire
+ * that thin does not survive being drawn small and stretched. One allocation
+ * per class colour, cached like everything else here.
+ */
+export const GLOW_SIZE = 512;
 
 /** Tilt toward the viewer. Straight on, every parallel is a flat line and the
  *  node is a striped disc rather than a sphere. */
 const TILT = 0.34;
+
+/** Degrees off the centre line, one every 7.5, stopping short of the pole
+ *  where the lines converge into a solid cap anyway. */
+const STEPS = [7.5, 15, 22.5, 30, 37.5, 45, 52.5, 60, 67.5, 75, 82.5];
 
 /**
  * A globe's wireframe, drawn inside a node: meridians sharing the poles,
@@ -44,11 +57,12 @@ function graticule(
 
   // White, not the memory's hue: the body is already near full colour, so a
   // grid in that same hue has nothing to be brighter than.
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.3)";
-  ctx.lineWidth = GLOW_SIZE * 0.0095;
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.2)";
+  ctx.lineWidth = GLOW_SIZE * 0.0026;
 
-  // Meridians: as tall as the sphere, as wide as their own longitude.
-  for (const longitude of [Math.PI / 4, Math.PI / 2.4]) {
+  // Meridians every 7.5 degrees. Each ellipse is a pair, east and west of the
+  // one facing you, so eleven draws make twenty-three lines.
+  for (const longitude of STEPS.map((d) => (d * Math.PI) / 180)) {
     ctx.beginPath();
     ctx.ellipse(
       centre,
@@ -71,7 +85,9 @@ function graticule(
   // Parallels: each at the height of its latitude, as wide as the sphere is
   // there - which is what crowds them toward the poles instead of stacking
   // them like rungs.
-  for (const latitude of [-Math.PI / 3, -Math.PI / 6, 0, Math.PI / 6, Math.PI / 3]) {
+  for (const latitude of [0, ...STEPS, ...STEPS.map((d) => -d)].map(
+    (d) => (d * Math.PI) / 180,
+  )) {
     const width = radius * Math.cos(latitude);
     ctx.beginPath();
     ctx.ellipse(
@@ -89,8 +105,15 @@ function graticule(
   ctx.restore();
 }
 
-export function glowCanvas(color: string): HTMLCanvasElement | null {
-  const key = `${theme}:${color}`;
+/**
+ * @param grid Draw the globe's wires into the texture. True for the flat
+ *   canvas, where a node cannot turn and a painted grid is the only grid there
+ *   can be. False in 3D, where the wires are a real sphere in the scene - a
+ *   sprite always faces the camera, so a grid painted into one is stuck to the
+ *   view and slides with it instead of turning with the node.
+ */
+export function glowCanvas(color: string, grid = true): HTMLCanvasElement | null {
+  const key = `${theme}:${color}:${grid}`;
   const cached = cache.get(key);
   if (cached) return cached;
 
@@ -162,7 +185,7 @@ export function glowCanvas(color: string): HTMLCanvasElement | null {
     ctx.arc(half, half, half * 0.44, 0, Math.PI * 2);
     ctx.stroke();
 
-    graticule(ctx, half, half * 0.44);
+    if (grid) graticule(ctx, half, half * 0.44);
   }
 
   cache.set(key, canvas);

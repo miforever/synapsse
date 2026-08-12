@@ -35,6 +35,8 @@ interface Entry {
   /** Size multiplier from how connected this memory is — see lib/node-scale. */
   weight: number;
   sprite: Sprite;
+  /** The globe's wires - real geometry, so they turn with the scene. */
+  wire: Mesh;
   label: SpriteText;
   type: string;
   bright?: SpriteMaterial;
@@ -84,7 +86,7 @@ function discTexture(color: string): CanvasTexture | null {
   const cached = classTextures.get(color);
   if (cached) return cached;
 
-  const canvas = glowCanvas(color);
+  const canvas = glowCanvas(color, false);
   if (!canvas) return null;
 
   const texture = new CanvasTexture(canvas);
@@ -144,6 +146,9 @@ export function setSpriteTheme(theme: "dark" | "light"): void {
     entry.bright?.dispose();
     entry.bright = undefined;
     entry.sprite.material = classMaterial(entry.type);
+    // The light disc is deliberately a flat token with a clean edge rather
+    // than a body with depth, and a wireframe globe is not part of that idea.
+    entry.wire.visible = theme === "dark";
   });
   // Labels already in the scene are restyled in place — rebuilding them would
   // drop every node's settled position.
@@ -211,12 +216,23 @@ export function buildNodeObject(
   label.raycast = () => undefined;
   group.add(label);
 
+  // Sized to the sprite's visible shell, so the wires sit on the surface the
+  // glow draws rather than floating inside it or hanging off it.
+  const wire = new Mesh(wireGeometry, wireMaterial);
+  wire.scale.setScalar(nodeRadius(weight));
+  wire.visible = spriteTheme === "dark";
+  // The invisible hit sphere is the click target; a wire that raycast too
+  // would take the hover on its own far side.
+  wire.raycast = () => undefined;
+  group.add(wire);
+
   group.add(new Mesh(hitGeometry, hitMaterial));
 
   objects.set(node.id, {
     group,
     weight,
     sprite,
+    wire,
     label,
     type: node.type,
     targetScale: BASE_SCALE * weight,
@@ -293,6 +309,46 @@ const hitMaterial = new MeshBasicMaterial({
 });
 
 const BASE_SCALE = 7;
+
+/*
+ * The globe's wires, as geometry rather than paint.
+ *
+ * A sprite always faces the camera, so a grid drawn into its texture is welded
+ * to the view: orbiting slides it across the node instead of turning it, and
+ * the node reads as a sticker rather than a body. A sphere has no such problem
+ * - its meridians go round the back, and the far side shows through the near
+ * one, which is what a projection does.
+ *
+ * One geometry and one material for the entire graph. The mesh per node is a
+ * pointer to both, so a thousand memories cost a thousand transforms rather
+ * than a thousand spheres.
+ */
+const WIRE_SEGMENTS = 24;
+// Matched to the flat canvas's painted grid, so a memory has the same number
+// of wires whichever view you are in.
+const WIRE_RINGS = 24;
+const wireGeometry = new SphereGeometry(1, WIRE_SEGMENTS, WIRE_RINGS);
+const WIRE_OPACITY = 0.16;
+const wireMaterial = new MeshBasicMaterial({
+  color: 0xffffff,
+  wireframe: true,
+  transparent: true,
+  opacity: WIRE_OPACITY,
+  // Never occludes: the node it wraps is a transparent sprite that writes no
+  // depth of its own, and a wire that did would carve holes in whatever is
+  // drawn after it.
+  depthWrite: false,
+});
+
+/*
+ * A second copy for the memories that are lit.
+ *
+ * The first rides the dimming, the way the shared class materials do. Without
+ * this the focused node would be the one thing on screen whose disc came up
+ * bright while its own wires faded out with the crowd - which is the opposite
+ * of what focusing is for. Two materials for any graph, not two per node.
+ */
+const wireBright = wireMaterial.clone();
 
 /**
  * How much of a node's sprite is actually the node.
@@ -390,11 +446,13 @@ function restyle(): void {
     if (lit || (focusing && highlighted)) {
       if (!entry.bright) entry.bright = classMaterial(entry.type).clone();
       entry.sprite.material = entry.bright;
+      entry.wire.material = wireBright;
       // A hovered node reads as fully lit even where focus had receded it —
       // that lift is the whole signal that the pointer has found something.
       entry.targetOpacity = lit || isFocus ? 1 : NEIGHBOUR_OPACITY;
     } else {
       entry.sprite.material = classMaterial(entry.type);
+      entry.wire.material = wireMaterial;
       entry.targetOpacity = focusing ? DIM_OPACITY : 1;
     }
 
@@ -457,11 +515,18 @@ function startFocusTween(): void {
       material.opacity = next;
     });
 
+    const wireWanted = dimTarget * WIRE_OPACITY;
+    const nextWire =
+      wireMaterial.opacity + (wireWanted - wireMaterial.opacity) * EASE;
+    if (Math.abs(wireWanted - nextWire) > EPSILON * WIRE_OPACITY) settled = false;
+    wireMaterial.opacity = nextWire;
+
     objects.forEach((entry) => {
       const scale = entry.sprite.scale.x;
       const nextScale = scale + (entry.targetScale - scale) * EASE;
       if (Math.abs(entry.targetScale - nextScale) > EPSILON) settled = false;
       entry.sprite.scale.set(nextScale, nextScale, 1);
+      entry.wire.scale.setScalar(nextScale * VISIBLE_RATIO);
       entry.label.center.setY(labelAnchor(nextScale));
 
       if (entry.bright && entry.sprite.material === entry.bright) {
