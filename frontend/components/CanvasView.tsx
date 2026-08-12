@@ -129,16 +129,25 @@ export function CanvasView({ mode }: { mode: CanvasMode }) {
 
   // Chip vocabularies come from the loaded graph rather than another request:
   // only classes actually in use are worth offering as filters.
+  // Tags are ordered by how many memories carry them, so the ones that
+  // actually partition the graph sit at the top of a long list. Ties fall back
+  // to alphabetical, which keeps the order stable between loads.
   const { classes, tags } = useMemo(() => {
     const classSet = new Set<string>();
-    const tagSet = new Set<string>();
+    const tagCounts = new Map<string, number>();
     for (const node of data.nodes) {
       classSet.add(node.type);
-      node.tags.forEach((tag) => tagSet.add(tag));
+      node.tags.forEach((tag) => {
+        tagCounts.set(tag, (tagCounts.get(tag) ?? 0) + 1);
+      });
     }
     return {
       classes: [...classSet].sort(),
-      tags: [...tagSet].sort(),
+      tags: [...tagCounts.entries()]
+        .sort(([aName, aCount], [bName, bCount]) =>
+          bCount - aCount || aName.localeCompare(bName),
+        )
+        .map(([name, count]) => ({ name, count })),
     };
   }, [data.nodes]);
 

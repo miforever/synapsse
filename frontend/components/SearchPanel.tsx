@@ -1,17 +1,29 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
+import { useMemo, useState } from "react";
 
 import { useSearch } from "@/hooks/useSearch";
 import { useGraphStore } from "./GraphProvider";
 import { colorForClass, labelForClass } from "@/lib/node-classes";
 import type { NodeSearchResult } from "@/lib/types";
 
+/** A tag and how many memories carry it, so the list can lead with the ones
+ * that actually divide the graph. */
+export interface TagOption {
+  name: string;
+  count: number;
+}
+
+/** Past this many tags the list stops being scannable and earns a filter of
+ * its own; below it, the input would be furniture. */
+const TAG_FILTER_THRESHOLD = 12;
+
 interface Props {
   query: string;
   onQueryChange: (query: string) => void;
   classes: string[];
-  tags: string[];
+  tags: TagOption[];
   activeClasses: Set<string>;
   activeTags: Set<string>;
   onToggleClass: (name: string) => void;
@@ -95,6 +107,17 @@ export function SearchPanel({
 }: Props) {
   const { results, searching } = useSearch(query);
   const { theme } = useGraphStore();
+  const [tagQuery, setTagQuery] = useState("");
+
+  // Active tags survive the filter regardless of what is typed: a filter you
+  // turned on should never vanish from the panel that turns it off again.
+  const visibleTags = useMemo(() => {
+    const needle = tagQuery.trim().toLowerCase();
+    if (!needle) return tags;
+    return tags.filter(
+      (tag) => tag.name.toLowerCase().includes(needle) || activeTags.has(tag.name),
+    );
+  }, [tags, tagQuery, activeTags]);
 
   return (
     <div className="glass-panel absolute right-5 top-5 z-20 w-80 rounded-xl p-4">
@@ -165,15 +188,35 @@ export function SearchPanel({
       )}
 
       {tags.length > 0 && (
-        <div className="mt-2 flex flex-wrap gap-1">
-          {tags.map((name) => (
-            <Chip
-              key={name}
-              label={`#${name}`}
-              active={activeTags.has(name)}
-              onClick={() => onToggleTag(name)}
+        <div className="mt-2">
+          {tags.length > TAG_FILTER_THRESHOLD && (
+            <input
+              value={tagQuery}
+              onChange={(event) => setTagQuery(event.target.value)}
+              placeholder="Filter tags…"
+              aria-label="Filter tags"
+              className="mb-2 w-full rounded-lg border border-line/[.12] bg-elevated/[.08] px-2.5 py-1.5 font-mono text-[10px] text-strong placeholder:text-faint/70 focus:border-cyan/40 focus:outline-none"
             />
-          ))}
+          )}
+
+          <div className="max-h-40 overflow-y-auto overscroll-contain pr-0.5">
+            <div className="flex flex-wrap gap-1">
+              {visibleTags.map((tag) => (
+                <Chip
+                  key={tag.name}
+                  label={`#${tag.name}`}
+                  active={activeTags.has(tag.name)}
+                  onClick={() => onToggleTag(tag.name)}
+                />
+              ))}
+
+              {visibleTags.length === 0 && (
+                <span className="px-1 py-1 font-mono text-[10px] text-faint/70">
+                  no tags match
+                </span>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
