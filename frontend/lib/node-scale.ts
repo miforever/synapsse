@@ -33,10 +33,22 @@ export interface Weighting {
  * power below one lifts the middle, so the difference between one connection
  * and three is visible instead of being flattened by a single hub at the top
  * of the range.
+ *
+ * Two numbers set how loud that difference is, and they pull against each
+ * other. `max` is the whole range - what the busiest memory in the graph is
+ * multiplied by. `curve` is how much of that range the quiet end takes: the
+ * lower it is, the more a memory with one connection already claims, which
+ * lifts the floor and leaves the hubs with less room to stand out in. So a
+ * wider range is only actually visible if the curve straightens with it.
+ *
+ * At 2.6 and 0.6 the busiest memory in a store whose hub has a dozen
+ * connections drew 1.9x the size of a memory with one. At 3.6 and 0.7 it draws
+ * 2.5x, while a memory with no connections at all is still 1 - the floor is
+ * held, and the range above it is spent on the memories that earned it.
  */
 export function weighBy(
   degrees: ReadonlyMap<string, number>,
-  { max = 2.6, curve = 0.6 }: { max?: number; curve?: number } = {},
+  { max = 3.6, curve = 0.7 }: { max?: number; curve?: number } = {},
 ): Weighting {
   const counts = [...degrees.values()];
   const busiest = counts.length ? Math.max(...counts) : 0;

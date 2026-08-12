@@ -4,17 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { PositionedNode } from "@/lib/force-graph";
 import type { GraphEdge } from "@/lib/types";
-import { computeLevelLayout } from "@/lib/untangle-levels";
 import { animateToLayout, computeUntangledLayout } from "@/lib/untangle";
-
-/**
- * The two arrangements on offer.
- *
- * `free` lets the graph find its own shape from short links and mutual
- * repulsion. `levels` rings it by distance from the most connected memory.
- * They answer different questions, so neither replaces the other.
- */
-export type UntangleMode = "free" | "levels";
 
 /**
  * The untangle gesture.
@@ -55,7 +45,7 @@ export function useUntangle({ nodes, links, onArranged, fit }: Options) {
   useEffect(() => () => cancel.current?.(), []);
 
   const untangle = useCallback(
-    (mode: UntangleMode = "free") => {
+    () => {
       const graphNodes = nodesRef.current;
       if (graphNodes.length === 0) return;
 
@@ -63,9 +53,7 @@ export function useUntangle({ nodes, links, onArranged, fit }: Options) {
       // running two loops that fight over the same nodes.
       cancel.current?.();
 
-      const compute =
-        mode === "levels" ? computeLevelLayout : computeUntangledLayout;
-      const { positions } = compute(graphNodes, linksRef.current);
+      const { positions } = computeUntangledLayout(graphNodes, linksRef.current);
       setRunning(true);
 
       cancel.current = animateToLayout(graphNodes, positions, {
