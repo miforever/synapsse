@@ -306,7 +306,7 @@ export function AppBar() {
 
       <div
         ref={container}
-        className="glass-panel fixed bottom-5 left-5 z-30 rounded-full px-3 py-2"
+        className="glass-panel fixed bottom-5 left-5 z-30 rounded-[23px] px-3 py-2"
       >
         {/* Opens upward, since this sits at the foot of the window. */}
         <SettingsPanel
