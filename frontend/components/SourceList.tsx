@@ -20,7 +20,7 @@ export function SourceList({ sources }: { sources: readonly SourceRef[] }) {
               href={source.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex gap-2.5 rounded-lg p-2 transition hover:bg-elevated/[.06]"
+              className="flex gap-2.5 rounded-[14px] p-2 transition hover:bg-elevated/[.06]"
             >
               {/* The same number the text cites, so a reader following a
                   citation lands on the right line without counting. */}

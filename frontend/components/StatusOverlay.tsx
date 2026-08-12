@@ -151,7 +151,7 @@ function CopyBlock({ code, clamped = false }: { code: string; clamped?: boolean 
   return (
     <div className="group/copy relative mt-2.5">
       <pre
-        className={`overflow-x-auto whitespace-pre-wrap break-all rounded-lg border border-line/[.1] bg-canvas/40 py-3 pl-3.5 pr-11 font-mono text-xs leading-relaxed text-cyan ${
+        className={`overflow-x-auto whitespace-pre-wrap break-all rounded-[16px] border border-line/[.1] bg-canvas/40 py-3 pl-3.5 pr-11 font-mono text-xs leading-relaxed text-cyan ${
           clipped ? "max-h-[5.4em] overflow-y-hidden" : ""
         }`}
       >
@@ -173,7 +173,7 @@ function CopyBlock({ code, clamped = false }: { code: string; clamped?: boolean 
         }}
         aria-label={copied ? "Copied" : "Copy to clipboard"}
         title={copied ? "Copied" : "Copy"}
-        className={`absolute right-2 top-2 rounded-md p-1.5 transition ${
+        className={`absolute right-2 top-2 rounded-full p-1.5 transition ${
           copied
             ? "text-emerald-300"
             : "text-faint/70 hover:bg-elevated/10 hover:text-strong"
@@ -202,7 +202,7 @@ function ConnectPanel() {
   const client = CLIENTS.find((entry) => entry.id === active) ?? CLIENTS[0];
 
   return (
-    <div className="mt-3.5 overflow-hidden rounded-xl border border-line/[.1] bg-elevated/[.03]">
+    <div className="mt-3.5 overflow-hidden rounded-full border border-line/[.1] bg-elevated/[.03]">
       {/* A segmented control rather than four loose pills: one indicator that
           moves reads as a single choice, where four independent buttons
           lighting up read as four independent switches. */}
@@ -220,14 +220,14 @@ function ConnectPanel() {
               aria-selected={selected}
               type="button"
               onClick={() => setActive(entry.id)}
-              className={`relative rounded-md px-3 py-1.5 text-xs transition-colors ${
+              className={`relative rounded-full px-3 py-1.5 text-xs transition-colors ${
                 selected ? "text-strong" : "text-faint hover:text-muted"
               }`}
             >
               {selected && (
                 <motion.span
                   layoutId="client-tab"
-                  className="absolute inset-0 rounded-md border border-line/[.14] bg-elevated/[.12]"
+                  className="absolute inset-0 rounded-full border border-line/[.14] bg-elevated/[.12]"
                   transition={
                     reduced
                       ? { duration: 0 }
@@ -345,7 +345,7 @@ export function StatusOverlay({
         variants={container}
         initial="hidden"
         animate="show"
-        className="glass-panel pointer-events-auto relative my-auto w-full max-w-2xl overflow-hidden rounded-2xl p-8 sm:p-10"
+        className="glass-panel pointer-events-auto relative my-auto w-full max-w-2xl overflow-hidden rounded-[28px] p-8 sm:p-10"
       >
         {/* A single wash of brand colour bleeding in from the top corner, so
             the panel has a light source instead of being a flat rectangle. */}
@@ -395,11 +395,11 @@ export function StatusOverlay({
                 onChange={(event) => setToken(event.target.value)}
                 placeholder="SYNAPSSE_AUTH_TOKEN"
                 aria-label="Access token"
-                className="min-w-0 flex-1 rounded-lg border border-line/[.14] bg-elevated/10 px-3 py-2 font-mono text-xs text-strong placeholder:text-faint/60 focus:border-cyan/40 focus:outline-none"
+                className="min-w-0 flex-1 rounded-full border border-line/[.14] bg-elevated/10 px-3 py-2 font-mono text-xs text-strong placeholder:text-faint/60 focus:border-cyan/40 focus:outline-none"
               />
               <button
                 type="submit"
-                className="rounded-lg bg-strong px-4 py-2 text-sm font-medium text-canvas transition hover:opacity-90"
+                className="rounded-full bg-strong px-4 py-2 text-sm font-medium text-canvas transition hover:opacity-90"
               >
                 Unlock
               </button>
@@ -433,7 +433,7 @@ export function StatusOverlay({
               <button
                 type="button"
                 onClick={onRetry}
-                className="mt-5 rounded-lg border border-line/20 px-4 py-2 font-mono text-[11px] uppercase tracking-widest text-muted transition hover:border-cyan/40 hover:text-strong"
+                className="mt-5 rounded-full border border-line/20 px-4 py-2 font-mono text-[11px] uppercase tracking-widest text-muted transition hover:border-cyan/40 hover:text-strong"
               >
                 Retry
               </button>

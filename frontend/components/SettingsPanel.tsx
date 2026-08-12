@@ -50,7 +50,7 @@ function Switch({
       aria-checked={checked}
       disabled={disabled}
       onClick={() => onChange(!checked)}
-      className="flex w-full items-start gap-3 rounded-lg px-2 py-2 text-left transition hover:bg-elevated/[.06] disabled:cursor-not-allowed disabled:opacity-40"
+      className="flex w-full items-start gap-3 rounded-[14px] px-2 py-2 text-left transition hover:bg-elevated/[.06] disabled:cursor-not-allowed disabled:opacity-40"
     >
       <span
         className={`mt-0.5 flex h-4 w-7 shrink-0 items-center rounded-full p-0.5 transition ${
@@ -103,14 +103,14 @@ function Action({
         onClick={onClick}
         disabled={disabled}
         aria-label={`${name}. ${hint}`}
-        className="flex h-8 w-8 items-center justify-center rounded-lg text-sm text-faint transition hover:bg-elevated/[.08] hover:text-strong disabled:cursor-not-allowed disabled:opacity-40"
+        className="flex h-8 w-8 items-center justify-center rounded-full text-sm text-faint transition hover:bg-elevated/[.08] hover:text-strong disabled:cursor-not-allowed disabled:opacity-40"
       >
         <span className={busy ? "inline-block animate-spin" : undefined}>
           {mark}
         </span>
       </button>
 
-      <span className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded-md border border-line/[.12] bg-canvas/95 px-2 py-1 opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100">
+      <span className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded-full border border-line/[.12] bg-canvas/95 px-2 py-1 opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100">
         <span className="block text-[11px] leading-none text-strong">
           {name}
         </span>
@@ -171,14 +171,14 @@ export function SettingsPanel({
             <p className="px-2 pb-1 pt-1 font-mono text-[9px] uppercase tracking-[0.2em] text-faint/70">
               Appearance
             </p>
-            <div className="flex gap-1 px-2 pb-1">
+            <div className="mx-2 mb-1 flex gap-0.5 rounded-full bg-elevated/[.05] p-0.5">
               {THEMES.map((option) => (
                 <button
                   key={option.value}
                   type="button"
                   onClick={() => onThemeChange(option.value)}
                   aria-pressed={theme === option.value}
-                  className={`flex-1 rounded-md px-2 py-1.5 text-[11px] transition ${
+                  className={`flex-1 rounded-full px-2 py-1.5 text-[11px] transition ${
                     theme === option.value
                       ? "bg-elevated/10 text-strong"
                       : "text-faint hover:text-muted"

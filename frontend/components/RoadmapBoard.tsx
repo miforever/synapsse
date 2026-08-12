@@ -62,7 +62,7 @@ export function RoadmapBoard({ roadmap, onOpen, onMove, error }: Props) {
       {error && (
         <p
           role="alert"
-          className="mx-6 mt-4 rounded-lg border border-rose-400/20 bg-rose-400/10 px-3 py-2 text-[11px] text-rose-200"
+          className="mx-6 mt-4 rounded-[16px] border border-rose-400/20 bg-rose-400/10 px-3 py-2 text-[11px] text-rose-200"
         >
           {error}
         </p>
@@ -96,7 +96,7 @@ export function RoadmapBoard({ roadmap, onOpen, onMove, error }: Props) {
               // writing it would broadcast an edit that edited nothing.
               if (item && item.node.status !== lane) onMove(item.node, lane);
             }}
-            className={`min-w-0 rounded-xl border p-2 transition ${
+            className={`min-w-0 rounded-[20px] border p-2 transition ${
               over?.lane === lane ? "border-cyan/40 bg-cyan/5" : "border-transparent"
             }`}
           >
@@ -150,7 +150,7 @@ export function RoadmapBoard({ roadmap, onOpen, onMove, error }: Props) {
 
               {roadmap.lanes[lane].length === 0 && (
                 <li
-                  className={`rounded-lg border border-dashed px-3 py-4 text-center font-mono text-[10px] transition ${
+                  className={`rounded-[16px] border border-dashed px-3 py-4 text-center font-mono text-[10px] transition ${
                     over?.lane === lane
                       ? "border-cyan/40 text-cyan"
                       : "border-line/[.07] text-faint/50"
@@ -176,7 +176,7 @@ function Gap({ open }: { open: boolean }) {
         open ? "h-12 opacity-100" : "h-0 opacity-0"
       }`}
     >
-      <div className="mb-2 h-full rounded-xl border border-dashed border-cyan/40 bg-cyan/5" />
+      <div className="mb-2 h-full rounded-[20px] border border-dashed border-cyan/40 bg-cyan/5" />
     </div>
   );
 }
@@ -241,7 +241,7 @@ function Card({
         requestAnimationFrame(() => frame.remove());
       }}
       onDragEnd={() => setDragging(false)}
-      className={`group rounded-xl border border-line/[.12] bg-raised transition hover:border-line/25 hover:bg-elevated/10 ${
+      className={`group rounded-[20px] border border-line/[.12] bg-raised transition hover:border-line/25 hover:bg-elevated/10 ${
         settled ? "opacity-60 hover:opacity-100" : ""
       } ${dragging ? "opacity-40" : ""}`}
     >

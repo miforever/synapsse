@@ -36,7 +36,7 @@ function Placeholder({
   onLoad?: () => void;
 }) {
   return (
-    <span className="my-2 flex items-center gap-3 rounded-lg border border-line/[.12] bg-raised px-3 py-2">
+    <span className="my-2 flex items-center gap-3 rounded-[16px] border border-line/[.12] bg-raised px-3 py-2">
       <span className="font-mono text-[10px] uppercase tracking-widest text-muted">
         {label}
       </span>
@@ -171,7 +171,7 @@ export function MemoryContent({
                       controls
                       preload="none"
                       src={url}
-                      className="my-2 w-full rounded-lg"
+                      className="my-2 w-full rounded-[16px]"
                     />
                   )}
                 />
@@ -186,7 +186,7 @@ export function MemoryContent({
                 src={url}
                 alt={label}
                 loading="lazy"
-                className="my-2 max-w-full rounded-lg border border-line/[.12]"
+                className="my-2 max-w-full rounded-[16px] border border-line/[.12]"
               />
             );
           },
