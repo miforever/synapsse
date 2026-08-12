@@ -8,19 +8,12 @@ import { useGraphStore } from "./GraphProvider";
 import { colorForClass, labelForClass } from "@/lib/node-classes";
 import type { NodeSearchResult } from "@/lib/types";
 
-/** A tag and how many memories carry it, so the list can lead with the ones
- * that actually divide the graph. */
 export interface TagOption {
   name: string;
   count: number;
 }
 
-/** Past this many tags the list stops being scannable and earns a filter of
- * its own; below it, the input would be furniture. */
 const TAG_FILTER_THRESHOLD = 12;
-
-/** How much of the vocabulary the well shows before it scrolls, in whole chip
- * rows, and the `gap-1` between them in pixels. */
 const TAG_ROWS = 5;
 const TAG_ROW_GAP = 4;
 
@@ -98,13 +91,24 @@ function Chip({
   );
 }
 
-/**
- * The quiet label that turns a stack of chips into a section.
- *
- * Without it every row in the panel carried the same weight and the eye had
- * nothing to structure on: one search box, then another box that looked like a
- * search box, then chips, then more chips.
- */
+function SearchIcon({ className }: { className: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <circle cx="11" cy="11" r="7" />
+      <path d="m20 20-3.5-3.5" />
+    </svg>
+  );
+}
+
 function SectionLabel({ children }: { children: string }) {
   return (
     <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-faint/70">
@@ -129,8 +133,6 @@ export function SearchPanel({
   const { theme } = useGraphStore();
   const [tagQuery, setTagQuery] = useState("");
 
-  // Active tags survive the filter regardless of what is typed: a filter you
-  // turned on should never vanish from the panel that turns it off again.
   const visibleTags = useMemo(() => {
     const needle = tagQuery.trim().toLowerCase();
     if (!needle) return tags;
@@ -139,10 +141,6 @@ export function SearchPanel({
     );
   }, [tags, tagQuery, activeTags]);
 
-  // The well is sized to a whole number of chip rows, measured from a real
-  // chip rather than assumed: a list cut off mid-chip reads as a rendering
-  // fault, not as something you can scroll. The fade is likewise only applied
-  // when there is genuinely more below.
   const listRef = useRef<HTMLDivElement>(null);
   const [maxHeight, setMaxHeight] = useState<number | undefined>();
   const [scrollable, setScrollable] = useState(false);
@@ -167,24 +165,9 @@ export function SearchPanel({
   }, [visibleTags]);
 
   return (
-    <div className="glass-panel absolute right-5 top-5 z-20 w-80 rounded-xl p-4">
-      {/* The one input that searches the graph, and the only one carrying an
-          icon: the glass says "this is the search" before the placeholder has
-          to. */}
+    <div className="glass-panel absolute right-5 top-5 z-20 w-80 rounded-[28px] p-5">
       <div className="relative">
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          className="pointer-events-none absolute left-3.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-faint"
-          aria-hidden="true"
-        >
-          <circle cx="11" cy="11" r="7" />
-          <path d="m20 20-3.5-3.5" />
-        </svg>
+        <SearchIcon className="pointer-events-none absolute left-3.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-faint" />
         <input
           value={query}
           onChange={(event) => onQueryChange(event.target.value)}
@@ -255,34 +238,28 @@ export function SearchPanel({
 
       {tags.length > 0 && (
         <div className="mt-3 border-t border-line/[.12] pt-3">
-          {/* The tag filter is not a second search box. It lives on the
-              section's own header line, borderless until focused, so the panel
-              keeps one input with real weight and one that is plainly a
-              refinement of the row beneath it. */}
           <div className="flex items-center gap-2">
             <SectionLabel>Tags</SectionLabel>
-            {/* The count is the only thing telling you the well holds more
-                than the rows on screen. Without it five rows read as the
-                whole vocabulary. */}
             <span className="font-mono text-[9px] text-faint/60">
               {tagQuery.trim()
                 ? `${visibleTags.length}/${tags.length}`
                 : tags.length}
             </span>
             {tags.length > TAG_FILTER_THRESHOLD && (
-              <input
-                value={tagQuery}
-                onChange={(event) => setTagQuery(event.target.value)}
-                placeholder="filter…"
-                aria-label="Filter tags"
-                className="ml-auto w-24 rounded-full border border-line/[.12] bg-elevated/[.08] px-2.5 py-0.5 text-right font-mono text-[10px] text-muted placeholder:text-faint/60 focus:border-cyan/40 focus:outline-none"
-              />
+              <div className="relative ml-auto">
+                <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 h-2.5 w-2.5 -translate-y-1/2 text-faint" />
+                <input
+                  value={tagQuery}
+                  onChange={(event) => setTagQuery(event.target.value)}
+                  placeholder="filter"
+                  aria-label="Filter tags"
+                  className="w-32 rounded-full border border-line/[.12] bg-elevated/[.08] py-1 pl-6 pr-3 font-mono text-[10px] text-strong placeholder:text-faint/60 focus:border-cyan/40 focus:outline-none"
+                />
+              </div>
             )}
           </div>
 
-          {/* Recessed, so the long list reads as a well inside the panel
-              rather than more of the same surface. */}
-          <div className="relative mt-2 rounded-2xl bg-elevated/[.04] p-2.5">
+          <div className="relative mt-2 rounded-[20px] bg-elevated/[.04] p-3">
             <div
               ref={listRef}
               style={{ maxHeight }}
