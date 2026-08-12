@@ -261,19 +261,11 @@ function Row({
 /**
  * One thing you can do to the canvas: a mark and its name, on one line.
  *
- * The two are not equals, but the difference is a fill, not a colour: Untangle
- * carries a faint surface and Reset does not, which is enough to say which one
- * the menu was opened for.
- *
- * No accent anywhere, resting or hovered. Cyan means exactly one thing in this
- * panel - the selected theme, the switch that is on - so a button wearing it
- * reads as a third thing that is currently active, and its neighbour then
- * reads as the one switched off. Hovering here does what hovering does on the
- * rows below: a faint fill and the text coming up to full. One panel, one
- * behaviour.
- *
- * Reset is muted rather than faint for the same reason: faint is the grey this
- * interface uses for controls that cannot be used.
+ * Nothing at rest but the icon and the label - no border, no fill, no colour.
+ * A box around each said these are two objects to weigh up, when they are two
+ * things you either want or do not, and the panel had three bordered blocks
+ * stacked before the first switch. Hovering does all of it, the way it does on
+ * the rows below: a faint fill and the text coming up to full.
  *
  * The hint hangs off the wrapper, not off the button. A disabled control
  * dispatches no pointer events at all, so a button that explained itself
@@ -285,7 +277,6 @@ function Action({
   icon,
   name,
   hint,
-  tone = "quiet",
   busy,
   disabled,
   onClick,
@@ -294,14 +285,11 @@ function Action({
   icon: IconName;
   name: string;
   hint: string;
-  tone?: "primary" | "quiet";
   busy?: boolean;
   disabled?: boolean;
   onClick: () => void;
   explain: Explain;
 }) {
-  const primary = tone === "primary";
-
   return (
     <span className="flex" {...explains(hint, explain)}>
       <button
@@ -309,17 +297,11 @@ function Action({
         onClick={onClick}
         disabled={disabled}
         aria-label={`${name}. ${hint}`}
-        className={`flex w-full items-center gap-2.5 rounded-[14px] border px-2.5 py-2 text-left transition hover:border-line/[.22] hover:bg-elevated/[.07] hover:text-strong disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-line/[.1] disabled:hover:bg-transparent ${
-          primary
-            ? "border-line/[.14] bg-elevated/[.06] text-strong shadow-[inset_0_1px_0_rgb(255_255_255/5%)]"
-            : "border-line/[.1] text-muted"
-        }`}
+        className="flex w-full items-center gap-2.5 rounded-[14px] px-2.5 py-2 text-left text-muted transition hover:bg-elevated/[.07] hover:text-strong disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
       >
         <Icon
           name={icon}
-          className={`h-3.5 w-3.5 shrink-0 ${primary ? "text-cyan" : ""} ${
-            busy ? "animate-spin" : ""
-          }`}
+          className={`h-3.5 w-3.5 shrink-0 ${busy ? "animate-spin" : ""}`}
         />
         <span className="text-[12px] leading-none">{name}</span>
       </button>
@@ -491,7 +473,6 @@ export function SettingsPanel({
                 icon="graph"
                 name={untangling ? "Working" : "Untangle"}
                 hint="Let the graph settle into its own shape"
-                tone="primary"
                 busy={untangling}
                 disabled={untangling}
                 onClick={onUntangle}
