@@ -207,13 +207,71 @@ export function updateLinkObject(
   object: Object3D,
   coords: { start: Endpoint; end: Endpoint },
   link?: FocusLink,
+  /** How far to hold each end off its memory's centre, in world units. */
+  trim?: { start: number; end: number },
 ): boolean {
   const { start, end } = coords;
   const geometry = (object as Line).geometry as BufferGeometry;
   const position = geometry.getAttribute("position") as BufferAttribute;
 
-  position.setXYZ(0, start.x ?? 0, start.y ?? 0, start.z ?? 0);
-  position.setXYZ(1, end.x ?? 0, end.y ?? 0, end.z ?? 0);
+  /*
+   * Stop at the surface, not the centre.
+   *
+   * Drawn centre to centre, every connection runs under its own memory and out
+   * the far side, and a hub becomes a starburst with a visible point of
+   * convergence sitting inside it - the one place on the canvas where the
+   * drawing gives away that a node is a flat sprite with lines passing behind
+   * it. Pulled back to each end's drawn radius, a connection arrives at the
+   * shell and stops, and the memory reads as a solid thing the lines are
+   * attached to.
+   *
+   * Nothing is drawn at all when the two are closer than their own radii: the
+   * remaining line would be inside both of them, and a stub poking out of one
+   * node into another is worse than no line for the moment they overlap.
+   */
+  const ax = start.x ?? 0;
+  const ay = start.y ?? 0;
+  const az = start.z ?? 0;
+  const bx = end.x ?? 0;
+  const by = end.y ?? 0;
+  const bz = end.z ?? 0;
+
+  let sx = ax;
+  let sy = ay;
+  let sz = az;
+  let ex = bx;
+  let ey = by;
+  let ez = bz;
+
+  if (trim) {
+    const dx = bx - ax;
+    const dy = by - ay;
+    const dz = bz - az;
+    const length = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    const gap = trim.start + trim.end;
+
+    if (length > gap) {
+      const ux = dx / length;
+      const uy = dy / length;
+      const uz = dz / length;
+      sx = ax + ux * trim.start;
+      sy = ay + uy * trim.start;
+      sz = az + uz * trim.start;
+      ex = bx - ux * trim.end;
+      ey = by - uy * trim.end;
+      ez = bz - uz * trim.end;
+    } else {
+      const mx = (ax + bx) / 2;
+      const my = (ay + by) / 2;
+      const mz = (az + bz) / 2;
+      sx = ex = mx;
+      sy = ey = my;
+      sz = ez = mz;
+    }
+  }
+
+  position.setXYZ(0, sx, sy, sz);
+  position.setXYZ(1, ex, ey, ez);
   position.needsUpdate = true;
   geometry.computeBoundingSphere();
 

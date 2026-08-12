@@ -56,6 +56,7 @@ import {
   applyWeights,
   buildNodeObject,
   disposeSpriteCache,
+  nodeRadius,
   setSpriteTheme,
 } from "./node-sprite";
 
@@ -372,6 +373,22 @@ function GraphCanvasImpl({
   const linkParticles = useCallback(
     (link: GraphEdge) => Math.round(1 + link.weight * 3),
     [],
+  );
+
+  /**
+   * Links, held off the memories they join.
+   *
+   * The radius has to be worked out here rather than inside the link module:
+   * it comes from how connected each end is, which is a property of the graph
+   * this canvas is drawing and not of any one link.
+   */
+  const linkPositionUpdate = useCallback(
+    (object: Object3D, coords: { start: Coords; end: Coords }, link: GraphEdge) =>
+      updateLinkObject(object, coords, link, {
+        start: nodeRadius(weigh(degrees.get(endpointId(link.source)) ?? 0)),
+        end: nodeRadius(weigh(degrees.get(endpointId(link.target)) ?? 0)),
+      }),
+    [degrees, weigh],
   );
 
   const nodeThreeObject = useCallback(
@@ -1156,7 +1173,7 @@ function GraphCanvasImpl({
          * the 2D view has.
          */
         linkThreeObject={buildLinkObject}
-        linkPositionUpdate={updateLinkObject}
+        linkPositionUpdate={linkPositionUpdate}
         // The plasma shader draws the line itself, so the renderer's own link
         // and particle rendering are both switched off.
         linkDirectionalParticles={0}

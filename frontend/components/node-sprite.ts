@@ -293,6 +293,22 @@ const hitMaterial = new MeshBasicMaterial({
 });
 
 const BASE_SCALE = 7;
+
+/**
+ * How much of a node's sprite is actually the node.
+ *
+ * The texture is mostly empty: the shell's silhouette sits at 0.44 of the
+ * texture's half-width, and everything past it is bloom fading to nothing. So
+ * the visible edge of a node is a quarter of the way out from its centre, not
+ * half - which is what anything measuring against a node on screen has to use,
+ * or it will clear a boundary the eye cannot see.
+ */
+const VISIBLE_RATIO = 0.22;
+
+/** The drawn radius of a memory, in world units, at a given weight. */
+export function nodeRadius(weight: number): number {
+  return BASE_SCALE * weight * VISIBLE_RATIO;
+}
 // Neighbours sit between the focus and the background so the local
 // neighbourhood reads as a group rather than as slightly-less-dim noise.
 const NEIGHBOUR_SCALE = 13;

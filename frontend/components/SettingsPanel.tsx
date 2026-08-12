@@ -261,24 +261,28 @@ function Row({
 /**
  * One thing you can do to the canvas: a mark and its name, on one line.
  *
- * Full width and stacked, not two pills sharing a row. Side by side and
- * equally sized they read as a segmented control - one of these two, pick -
- * which is what the theme track above actually is, and these are nothing of
- * the kind: they are two unrelated things you press, and pressing one says
- * nothing about the other. Left-aligned for the same reason. A centred label
- * in a symmetrical pill is the shape of a choice; text that starts where every
- * other line in the panel starts is the shape of a command.
+ * The two are not equals and are no longer drawn as though they were. Two
+ * matched slabs said press either, they are the same kind of thing, when one
+ * is the reason the menu gets opened and the other is a way back you reach for
+ * once a month. Weight follows that: Untangle is the only object in the panel
+ * wearing the accent, and Reset gives up its box entirely and sits under it as
+ * a line of text that brightens when you go to it.
+ *
+ * Spending the accent exactly once is the point. A cyan rim on both would make
+ * neither of them the answer to what do I press, and the colour already means
+ * something everywhere else on the canvas.
  *
  * The hint hangs off the wrapper, not off the button. A disabled control
- * dispatches no pointer events at all, so a tile that explained itself stopped
- * explaining itself the moment you pressed it and it went busy - exactly when
- * you most want to be told what it is doing. The wrapper is never disabled, so
- * the sentence survives.
+ * dispatches no pointer events at all, so a button that explained itself
+ * stopped explaining itself the moment you pressed it and it went busy -
+ * exactly when you most want to be told what it is doing. The wrapper is never
+ * disabled, so the sentence survives.
  */
 function Action({
   icon,
   name,
   hint,
+  tone = "quiet",
   busy,
   disabled,
   onClick,
@@ -287,11 +291,14 @@ function Action({
   icon: IconName;
   name: string;
   hint: string;
+  tone?: "primary" | "quiet";
   busy?: boolean;
   disabled?: boolean;
   onClick: () => void;
   explain: Explain;
 }) {
+  const primary = tone === "primary";
+
   return (
     <span className="flex" {...explains(hint, explain)}>
       <button
@@ -299,11 +306,20 @@ function Action({
         onClick={onClick}
         disabled={disabled}
         aria-label={`${name}. ${hint}`}
-        className="flex w-full items-center gap-2.5 rounded-[14px] border border-line/[.1] bg-elevated/[.06] px-2.5 py-2 text-left text-muted shadow-[inset_0_1px_0_rgb(255_255_255/5%)] transition hover:border-line/[.2] hover:bg-elevated/[.11] hover:text-strong active:bg-elevated/[.04] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-line/[.1] disabled:hover:bg-elevated/[.06]"
+        className={`flex w-full items-center gap-2.5 rounded-[14px] px-2.5 text-left transition disabled:cursor-not-allowed disabled:opacity-40 ${
+          primary
+            ? // Glass with a lit top edge and a glow that sits just outside
+              // it, so the button reads as raised out of the panel rather than
+              // painted onto it.
+              "border border-cyan/25 bg-cyan/[.07] py-2 text-strong shadow-[inset_0_1px_0_rgb(255_255_255/8%),0_0_20px_-8px_rgb(var(--accent)/70%)] hover:border-cyan/40 hover:bg-cyan/[.12] hover:shadow-[inset_0_1px_0_rgb(255_255_255/10%),0_0_24px_-6px_rgb(var(--accent)/90%)] active:bg-cyan/[.05] disabled:hover:border-cyan/25 disabled:hover:bg-cyan/[.07]"
+            : "py-[7px] text-faint hover:bg-elevated/[.07] hover:text-strong"
+        }`}
       >
         <Icon
           name={icon}
-          className={`h-3.5 w-3.5 shrink-0 ${busy ? "animate-spin" : ""}`}
+          className={`h-3.5 w-3.5 shrink-0 ${primary ? "text-cyan" : ""} ${
+            busy ? "animate-spin" : ""
+          }`}
         />
         <span className="text-[12px] leading-none">{name}</span>
       </button>
@@ -466,12 +482,13 @@ export function SettingsPanel({
             land, and closing over it would hide what the press was for. Reset
             closes, because there is nothing to watch.
           */}
-          <div className="flex flex-col gap-1.5 px-2.5">
+          <div className="flex flex-col gap-1 px-2.5">
             {onUntangle && (
               <Action
                 icon="graph"
                 name={untangling ? "Working" : "Untangle"}
                 hint="Let the graph settle into its own shape"
+                tone="primary"
                 busy={untangling}
                 disabled={untangling}
                 onClick={onUntangle}
