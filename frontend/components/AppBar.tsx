@@ -169,14 +169,14 @@ export function AppBar() {
         the top-right and the drawer owns the right edge, so nothing here can
         ever grow into something else.
       */}
-      <div className="pointer-events-none absolute left-5 top-5 z-30 flex items-center gap-2.5">
+      <div className="pointer-events-none fixed left-5 top-5 z-30 flex items-center gap-2.5">
         {/*
           The mark keeps its dark plate in both themes. Its rays are violet and
           cyan drawn to glow against near-black; on white they thin out into a
           pale scribble, so the plate travels with it rather than the mark
           being redrawn twice.
         */}
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#0A0814]">
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[10px] bg-[#0A0814]">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/branding/synapsse-mark.svg"
@@ -204,7 +204,7 @@ export function AppBar() {
         overwritten mid-flight and the pill would slide off centre as it
         resized.
       */}
-      <div className="pointer-events-none absolute inset-x-0 top-5 z-30 flex justify-center">
+      <div className="pointer-events-none fixed inset-x-0 top-5 z-30 flex justify-center">
         <div className="glass-panel pointer-events-auto flex items-center rounded-full px-1.5 py-1">
           <nav ref={sections.track} className="relative flex items-center">
             {/*
@@ -306,7 +306,7 @@ export function AppBar() {
 
       <div
         ref={container}
-        className="glass-panel absolute bottom-5 left-5 z-30 rounded-xl px-3 py-2"
+        className="glass-panel fixed bottom-5 left-5 z-30 rounded-[23px] px-3 py-2"
       >
         {/* Opens upward, since this sits at the foot of the window. */}
         <SettingsPanel
@@ -351,7 +351,7 @@ export function AppBar() {
             aria-expanded={open}
             aria-label="Settings"
             title="Settings"
-            className={`rounded-lg px-2 py-1.5 text-base leading-none transition ${
+            className={`rounded-full px-2 py-1.5 text-base leading-none transition ${
               open
                 ? "bg-elevated/10 text-strong"
                 : "text-faint hover:text-muted"

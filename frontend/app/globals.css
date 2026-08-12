@@ -75,6 +75,35 @@ body {
     @apply backdrop-blur-xl;
     box-shadow: var(--shadow);
   }
+
+  /*
+   * A scrollbar that is always there.
+   *
+   * macOS hides overlay scrollbars until you scroll, which is fine for a page
+   * and wrong for a short well inside a panel: with the bar hidden there is
+   * nothing to say the list continues, and it reads as the whole vocabulary.
+   */
+  .scroll-slim {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(var(--line) / 0.22) transparent;
+  }
+
+  .scroll-slim::-webkit-scrollbar {
+    width: 4px;
+  }
+
+  .scroll-slim::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scroll-slim::-webkit-scrollbar-thumb {
+    border-radius: 2px;
+    background: rgb(var(--line) / 0.22);
+  }
+
+  .scroll-slim::-webkit-scrollbar-thumb:hover {
+    background: rgb(var(--line) / 0.35);
+  }
 }
 
 /* Markdown inside the drawer. Scoped rather than using a plugin so the type

@@ -21,7 +21,7 @@ export function HoverPreview({
     <span
       className={`pointer-events-none absolute bottom-full left-0 z-40 mb-1.5 hidden group-hover:block ${width}`}
     >
-      <span className="glass-panel block rounded-lg p-3">{children}</span>
+      <span className="glass-panel block rounded-[20px] p-3">{children}</span>
     </span>
   );
 }

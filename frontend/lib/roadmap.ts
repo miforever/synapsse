@@ -14,7 +14,7 @@ export const LANES: Status[] = ["todo", "doing", "done", "dropped"];
 
 export const LANE_LABELS: Record<Status, string> = {
   todo: "Planned",
-  doing: "In flight",
+  doing: "In progress",
   done: "Done",
   dropped: "Dropped",
 };

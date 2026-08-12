@@ -48,7 +48,7 @@ export function FileList({ files, busy, error, onRemove }: Props) {
         {files.map((file) => (
           <li
             key={file.id}
-            className="group flex items-center gap-2.5 rounded-lg border border-line/[.07] bg-raised p-2"
+            className="group flex items-center gap-2.5 rounded-[16px] border border-line/[.07] bg-raised p-2"
           >
             {isImage(file) ? (
               // eslint-disable-next-line @next/next/no-img-element

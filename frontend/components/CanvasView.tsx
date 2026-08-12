@@ -131,14 +131,20 @@ export function CanvasView({ mode }: { mode: CanvasMode }) {
   // only classes actually in use are worth offering as filters.
   const { classes, tags } = useMemo(() => {
     const classSet = new Set<string>();
-    const tagSet = new Set<string>();
+    const tagCounts = new Map<string, number>();
     for (const node of data.nodes) {
       classSet.add(node.type);
-      node.tags.forEach((tag) => tagSet.add(tag));
+      node.tags.forEach((tag) => {
+        tagCounts.set(tag, (tagCounts.get(tag) ?? 0) + 1);
+      });
     }
     return {
       classes: [...classSet].sort(),
-      tags: [...tagSet].sort(),
+      tags: [...tagCounts.entries()]
+        .sort(([aName, aCount], [bName, bCount]) =>
+          bCount - aCount || aName.localeCompare(bName),
+        )
+        .map(([name, count]) => ({ name, count })),
     };
   }, [data.nodes]);
 

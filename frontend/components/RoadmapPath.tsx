@@ -91,7 +91,7 @@ export function RoadmapPath({ path, onOpen }: Props) {
       })}
 
       {path.cyclic.length > 0 && (
-        <section className="mt-6 rounded-xl border border-amber-400/20 bg-amber-400/5 p-4">
+        <section className="mt-6 rounded-[20px] border border-amber-400/20 bg-amber-400/5 p-4">
           <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-amber-300/80">
             Waiting on each other
           </p>
@@ -127,7 +127,7 @@ function Step({
     <button
       type="button"
       onClick={() => onOpen(node)}
-      className={`rounded-xl border p-3 text-left transition ${
+      className={`rounded-[16px] border p-3 text-left transition ${
         done
           ? "border-line/[.07] bg-raised opacity-60 hover:opacity-100"
           : node.status === "doing"
