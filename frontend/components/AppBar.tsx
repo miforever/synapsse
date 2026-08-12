@@ -169,7 +169,7 @@ export function AppBar() {
         the top-right and the drawer owns the right edge, so nothing here can
         ever grow into something else.
       */}
-      <div className="pointer-events-none absolute left-5 top-5 z-30 flex items-center gap-2.5">
+      <div className="pointer-events-none fixed left-5 top-5 z-30 flex items-center gap-2.5">
         {/*
           The mark keeps its dark plate in both themes. Its rays are violet and
           cyan drawn to glow against near-black; on white they thin out into a
@@ -204,7 +204,7 @@ export function AppBar() {
         overwritten mid-flight and the pill would slide off centre as it
         resized.
       */}
-      <div className="pointer-events-none absolute inset-x-0 top-5 z-30 flex justify-center">
+      <div className="pointer-events-none fixed inset-x-0 top-5 z-30 flex justify-center">
         <div className="glass-panel pointer-events-auto flex items-center rounded-full px-1.5 py-1">
           <nav ref={sections.track} className="relative flex items-center">
             {/*
@@ -306,7 +306,7 @@ export function AppBar() {
 
       <div
         ref={container}
-        className="glass-panel absolute bottom-5 left-5 z-30 rounded-full px-3 py-2"
+        className="glass-panel fixed bottom-5 left-5 z-30 rounded-full px-3 py-2"
       >
         {/* Opens upward, since this sits at the foot of the window. */}
         <SettingsPanel
