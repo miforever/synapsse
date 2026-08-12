@@ -37,6 +37,8 @@ interface Entry {
   sprite: Sprite;
   /** The globe's wires - real geometry, so they turn with the scene. */
   wire: Mesh;
+  /** The invisible sphere that is actually clicked and dragged. */
+  hit: Mesh;
   label: SpriteText;
   type: string;
   bright?: SpriteMaterial;
@@ -166,6 +168,18 @@ export function buildNodeObject(
 
   const sprite = new Sprite(classMaterial(node.type));
   sprite.scale.set(BASE_SCALE * weight, BASE_SCALE * weight, 1);
+  /*
+   * Not a click target, and never was meant to be.
+   *
+   * A sprite raycasts on its whole quad, transparent pixels and all - and most
+   * of this one is bloom fading to nothing. A hub's quad is over thirty units
+   * across, so with the visible node a quarter of that, every drag that began
+   * anywhere in the surrounding haze grabbed the memory instead of turning the
+   * camera. It was survivable while nodes were small and became the whole
+   * interaction once they were sized by how connected they are. The invisible
+   * sphere below is the hit target.
+   */
+  sprite.raycast = () => undefined;
   group.add(sprite);
 
   if (showThumbnails && node.thumbnail_url) {
@@ -226,13 +240,16 @@ export function buildNodeObject(
   wire.raycast = () => undefined;
   group.add(wire);
 
-  group.add(new Mesh(hitGeometry, hitMaterial));
+  const hit = new Mesh(hitGeometry, hitMaterial);
+  hit.scale.setScalar(hitScale(weight));
+  group.add(hit);
 
   objects.set(node.id, {
     group,
     weight,
     sprite,
     wire,
+    hit,
     label,
     type: node.type,
     targetScale: BASE_SCALE * weight,
@@ -302,6 +319,18 @@ const HALO_OPACITY = 0.9;
  */
 const HIT_RADIUS = 7;
 const hitGeometry = new SphereGeometry(HIT_RADIUS, 8, 6);
+
+/**
+ * The hit sphere, in units of its own geometry.
+ *
+ * Never smaller than the original fixed radius, because the graph drifts under
+ * the pointer and a target the exact size of a small node is a target you
+ * chase. A well-connected memory is drawn larger than that floor, though, and
+ * its hit sphere has to keep up or the middle of a hub stops answering.
+ */
+function hitScale(weight: number): number {
+  return Math.max(HIT_RADIUS, nodeRadius(weight) * 1.35) / HIT_RADIUS;
+}
 const hitMaterial = new MeshBasicMaterial({
   transparent: true,
   opacity: 0,
@@ -323,10 +352,10 @@ const BASE_SCALE = 7;
  * pointer to both, so a thousand memories cost a thousand transforms rather
  * than a thousand spheres.
  */
-const WIRE_SEGMENTS = 24;
+const WIRE_SEGMENTS = 16;
 // Matched to the flat canvas's painted grid, so a memory has the same number
 // of wires whichever view you are in.
-const WIRE_RINGS = 24;
+const WIRE_RINGS = 14;
 const wireGeometry = new SphereGeometry(1, WIRE_SEGMENTS, WIRE_RINGS);
 const WIRE_OPACITY = 0.16;
 const wireMaterial = new MeshBasicMaterial({
@@ -468,6 +497,7 @@ function restyle(): void {
     // The larger of the two, so hovering the open memory cannot shrink it.
     entry.targetScale = Math.max(focusScale, hoverScale);
 
+    entry.hit.scale.setScalar(hitScale(entry.weight));
     entry.targetLabelOpacity = lit || !focusing || highlighted ? 1 : DIM_OPACITY;
   });
 

@@ -33,9 +33,9 @@ export const GLOW_SIZE = 512;
  *  node is a striped disc rather than a sphere. */
 const TILT = 0.34;
 
-/** Degrees off the centre line, one every 7.5, stopping short of the pole
- *  where the lines converge into a solid cap anyway. */
-const STEPS = [7.5, 15, 22.5, 30, 37.5, 45, 52.5, 60, 67.5, 75, 82.5];
+/** Degrees off the centre line, stopping short of the pole where the lines
+ *  converge into a solid cap anyway. */
+const STEPS = [15, 30, 45, 60, 75];
 
 /**
  * A globe's wireframe, drawn inside a node: meridians sharing the poles,
@@ -60,8 +60,8 @@ function graticule(
   ctx.strokeStyle = "rgba(255, 255, 255, 0.2)";
   ctx.lineWidth = GLOW_SIZE * 0.0026;
 
-  // Meridians every 7.5 degrees. Each ellipse is a pair, east and west of the
-  // one facing you, so eleven draws make twenty-three lines.
+  // Meridians every 15 degrees. Each ellipse is a pair, east and west of the
+  // one facing you, so five draws make eleven lines.
   for (const longitude of STEPS.map((d) => (d * Math.PI) / 180)) {
     ctx.beginPath();
     ctx.ellipse(
