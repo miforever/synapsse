@@ -1,6 +1,6 @@
 /** Mirrors the projections in the daemon's app/models/graph.py. */
 
-export type RelationType = "depends_on" | "relates_to" | "blocks" | "part_of";
+export type RelationType = "depends_on" | "relates_to" | "part_of";
 
 /** Where a piece of work stands. Closed — the roadmap draws these four. */
 export type Status = "todo" | "doing" | "done" | "dropped";

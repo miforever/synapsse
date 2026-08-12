@@ -90,8 +90,12 @@ With the daemon running, point any MCP client at `http://localhost:8000/mcp`.
 **Claude Code** — one command:
 
 ```bash
-claude mcp add --transport http synapsse http://localhost:8000/mcp
+claude mcp add --scope user --transport http synapsse http://localhost:8000/mcp
 ```
+
+`--scope user` is the part worth not skipping. Without it the server is
+registered for the directory the command happened to run in, and a memory meant
+to follow you between projects is reachable from exactly one of them.
 
 Or commit it to the project by writing `.mcp.json`:
 
@@ -108,8 +112,15 @@ Or commit it to the project by writing `.mcp.json`:
 
 **Cursor** — add the same block to `~/.cursor/mcp.json`.
 
-Then ask the agent to remember something. The node appears on the canvas as it
-is written, with no refresh.
+**Then restart the client.** MCP servers are connected once, when a session
+starts, so the session that registered the server does not have its tools —
+they attach to the next one. An agent that says it cannot see SYNAPSSE
+immediately after adding it is not misconfigured, it just has not been
+restarted. In Claude Code, `claude --continue` picks the conversation back up
+where it was.
+
+After that, ask the agent to remember something. The node appears on the canvas
+as it is written, with no refresh.
 
 ### What the agent is told
 
@@ -161,27 +172,92 @@ asking me something I may have already answered.
 Belt and braces, for the same reason a reminder written in two places gets
 read.
 
+### Recall without being asked
+
+Writing is the easy half. The hard half is being *read* — and an agent only
+searches when it occurs to it to search, which is not the case where recall
+would have paid. It does not know what it does not know.
+
+No server can fix that, because the decision to retrieve happens in the client.
+A hook can. `hooks/synapsse_recall.py` runs on every message you send, searches
+the store with your own words, and prints what it finds into the model's
+context *before* the model decides anything — no tool call to remember, no
+judgement to exercise.
+
+For Claude Code, in `~/.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /absolute/path/to/synapsse/hooks/synapsse_recall.py"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+Open `/hooks` once afterwards, or restart, so the settings are re-read — a hook
+added mid-session is not always picked up by the running one. You will know it
+works when memories appear above the reply without anything having called a
+tool.
+
+It needs nothing outside the standard library, adds about 130ms to a message,
+and is written so that every failure — daemon down, still loading, answering
+nonsense — prints nothing and costs you nothing. Short prompts ("yes", "go on")
+and slash commands are skipped rather than searched.
+
+Tune it with the environment, where it is registered:
+
+| Variable | Default | |
+| --- | --- | --- |
+| `SYNAPSSE_URL` | `http://127.0.0.1:8000` | Where the daemon is |
+| `SYNAPSSE_TOKEN` | — | Sent as `X-Synapsse-Token` when set |
+| `SYNAPSSE_RECALL_LIMIT` | `5` | Memories injected per message |
+| `SYNAPSSE_RECALL_TIMEOUT` | `1.5` | Seconds before giving up silently |
+
+The block is labelled as background rather than instruction, deliberately: the
+summaries were written by an earlier agent session, and a note must never be
+able to issue orders to a later one just by phrasing itself as a command.
+
 ## Memory model
 
 Each memory is a **node** — a title, a short summary for cheap index reads, a
 full Markdown body, and free-form JSON metadata. Nodes are joined by typed,
-weighted **edges** (`depends_on`, `relates_to`, `blocks`, `part_of`).
+weighted **edges** — `depends_on`, `part_of`, and `relates_to` for a link that
+is real but unstructured.
+
+There is no `blocks`: it said exactly what `depends_on` says with the ends
+swapped, so one situation could be recorded two ways and every reader had to
+normalise before it could answer.
 
 Nodes are organized two ways:
 
-- **Class** — exactly one per node, describing the coarse shape of the thing.
-  Ships with entities (`person`, `organization`, `place`, `object`), work
-  (`project`, `plan`, `issue`, `event`), and knowledge (`idea`, `fact`,
-  `decision`, `preference`, `resource`). The set lives in a table rather than a
-  fixed enum, so agents register new classes as they need them — no migration.
+- **Class** — exactly one per node, from a fixed thirteen: entities (`person`,
+  `organization`, `place`, `object`), work (`project`, `plan`, `issue`,
+  `event`), and knowledge (`idea`, `fact`, `decision`, `preference`,
+  `resource`). Closed on purpose — the canvas paints a colour per class, and a
+  set that grows at runtime is a set where half the graph is the fallback grey.
 - **Tags** — any number per node, created freely and indexed for filtering.
 
-The split is deliberate: a class is the shape, tags are the specifics. A pet is
-an `object` tagged `animal`, not a class of its own — unless you track enough of
-them to want one, which costs nothing.
+The split is deliberate: a class is the shape, tags are the specifics. A
+girlfriend is a `person` tagged `girlfriend`; a pet is an `object` tagged `pet`.
+A word that is not a class is kept as a tag and the write still succeeds — the
+memory is never lost to a vocabulary argument, and the response says what it
+did.
 
-Names are normalized on write, so `Task`, `task`, and `TASK` resolve to a single
-class instead of three.
+Adding a fourteenth class is a release rather than a migration, and
+`list_vocabulary` returns tag counts, so the tags that keep accumulating are
+the evidence for which one to add.
+
+Names are normalized on write, so `Task`, `task`, and `TASK` resolve to one
+thing instead of three.
 
 Memories are editable and removable — a store you cannot correct just
 accumulates confidently stated mistakes.
@@ -253,12 +329,17 @@ Exposed over MCP:
 | `add_memory(...)`                             | Persist a node, its tags, edges, files and sources        |
 | `update_memory(...)`                          | Correct a memory; omitted fields stay untouched           |
 | `delete_memory(node_id)`                      | Remove a memory and every edge touching it                |
-| `link_memories(...)` / `unlink_memories(...)`  | Connect or disconnect two memories                        |
-| `attach_file(...)` / `detach_file(...)`        | Attach a file on this machine, or remove one              |
-| `set_status(...)`                              | Mark work as todo, doing, done or dropped                 |
-| `read_roadmap()`                               | Everything with a status, soonest first                   |
-| `cite_source(...)` / `uncite_source(...)`      | Record where a claim came from, or remove a citation      |
-| `list_types()` / `list_tags()`                 | Existing vocabulary, so agents reuse rather than invent   |
+| `link_memories(..., remove=False)`            | Connect two memories, or take the connection away         |
+| `attach_file(..., remove="")`                 | Attach a file on this machine, or delete a stored copy    |
+| `cite_source(..., remove="")`                 | Record where a claim came from, or drop a citation        |
+| `read_roadmap()`                              | Everything with a status, soonest first                   |
+| `stale_memories(days, limit)`                 | What nothing has read since it was written                |
+| `list_vocabulary()`                           | The classes, the tags in use, and what the canvas renders |
+
+Thirteen, down from eighteen. Each one is a schema in the system prompt of
+every session in every project, so an inverse pair that could be a parameter
+was costing context in perpetuity. `set_status` went for the same reason: it
+was `update_memory` with fewer arguments.
 
 ## Search
 
@@ -394,14 +475,8 @@ Issues and pull requests are welcome. A few things that will make review quick:
 
 ## License
 
-[PolyForm Noncommercial 1.0.0](LICENSE) — free for any noncommercial purpose:
-personal use, study, hobby projects, research, and use by charities, schools
-and public institutions. You may read it, run it, change it and share your
-changes, provided the notices travel with it.
+[MIT](LICENSE). Use it for anything, personal or commercial, including inside
+a product you sell. Keep the notice with it and that is the whole obligation.
 
-Commercial use is not granted by this licence. If you want it for a business,
-[open an issue](https://github.com/miforever/synapsse/issues).
-
-Note on wording: this is **source-available**, not open source in the OSI
-sense — the definition does not permit a restriction on the field of use. It
-is deliberate, and the distinction is worth being accurate about.
+A memory layer nobody may use at work is a memory layer nobody uses, since
+work is where the context worth keeping accumulates.

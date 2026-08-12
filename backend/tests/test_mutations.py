@@ -3,6 +3,7 @@
 import aiosqlite
 
 from app.canvas.graph import get_snapshot
+from app.core.fields import FALLBACK_CLASS
 from app.memories.edges import create_edge, delete_edge, list_edges_for_node
 from app.memories.models import EdgeCreate, NodeCreate, NodeUpdate
 from app.memories.nodes import create_node, delete_node, get_node, update_node
@@ -25,15 +26,17 @@ async def test_update_changes_only_given_fields(conn: aiosqlite.Connection) -> N
 
 async def test_update_refreshes_search_index(conn: aiosqlite.Connection) -> None:
     """The FTS triggers must follow edits, or search returns stale titles."""
-    from app.memories.nodes import search_index
+    from app.search.service import search
 
     node = await create_node(
         conn, NodeCreate(type="idea", title="Aardvark", summary="s")
     )
     await update_node(conn, node.id, NodeUpdate(title="Zeppelin"))
 
-    assert await search_index(conn, "Aardvark") == []
-    assert [r.title for r in await search_index(conn, "Zeppelin")] == ["Zeppelin"]
+    assert await search(conn, "Aardvark", mode="keyword") == []
+    assert [r.title for r in await search(conn, "Zeppelin", mode="keyword")] == [
+        "Zeppelin"
+    ]
 
 
 async def test_update_bumps_updated_at(conn: aiosqlite.Connection) -> None:
@@ -43,11 +46,13 @@ async def test_update_bumps_updated_at(conn: aiosqlite.Connection) -> None:
     assert updated.updated_at >= node.updated_at
 
 
-async def test_update_registers_new_class(conn: aiosqlite.Connection) -> None:
+async def test_update_cannot_invent_a_class(conn: aiosqlite.Connection) -> None:
     node = await create_node(conn, NodeCreate(type="idea", title="A", summary="s"))
-    await update_node(conn, node.id, NodeUpdate(type="Retrospective"))
+    updated = await update_node(conn, node.id, NodeUpdate(type="Retrospective"))
 
-    assert "retrospective" in await list_types(conn)
+    assert updated is not None
+    assert updated.type == FALLBACK_CLASS
+    assert "retrospective" not in await list_types(conn)
 
 
 async def test_omitted_tags_are_preserved(conn: aiosqlite.Connection) -> None:
@@ -96,13 +101,13 @@ async def test_delete_missing_node_reports_false(conn: aiosqlite.Connection) -> 
 
 
 async def test_deleted_node_leaves_search_index(conn: aiosqlite.Connection) -> None:
-    from app.memories.nodes import search_index
+    from app.search.service import search
 
     node = await create_node(
         conn, NodeCreate(type="idea", title="Ephemeral", summary="s")
     )
     await delete_node(conn, node.id)
-    assert await search_index(conn, "Ephemeral") == []
+    assert await search(conn, "Ephemeral", mode="keyword") == []
 
 
 async def test_unlink_keeps_both_nodes(conn: aiosqlite.Connection) -> None:

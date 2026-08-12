@@ -33,8 +33,8 @@ export function RoadmapPath({ path, onOpen }: Props) {
         <p className="text-sm text-muted">No steps to lay out yet.</p>
         <p className="max-w-md text-xs leading-relaxed text-faint/70">
           Work appears here once it has a status, and falls into order once
-          memories are linked with <code className="font-mono">depends_on</code>{" "}
-          or <code className="font-mono">blocks</code>.
+          memories are linked with{" "}
+          <code className="font-mono">depends_on</code>.
         </p>
       </div>
     );

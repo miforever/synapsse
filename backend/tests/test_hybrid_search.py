@@ -70,11 +70,37 @@ async def test_deleting_a_memory_removes_its_vector(
     assert await vectors.count(conn) == 0
 
 
+async def _stored_vector(conn: aiosqlite.Connection, node_id: str) -> bytes:
+    async with conn.execute(
+        "SELECT embedding FROM node_vectors WHERE node_id = ?", (node_id,)
+    ) as cursor:
+        row = await cursor.fetchone()
+    assert row is not None
+    return bytes(row[0])
+
+
 async def test_editing_a_memory_reindexes_it(conn: aiosqlite.Connection) -> None:
     node = await create_node(conn, NodeCreate(type="idea", title="A", summary="s"))
+    before = await _stored_vector(conn, node.id)
+
     await update_node(conn, node.id, NodeUpdate(title="Completely different"))
 
     # Still exactly one vector: replaced rather than duplicated.
+    assert await vectors.count(conn) == 1
+
+    # And it is genuinely the new one. Counting alone cannot see this fail:
+    # re-indexing swallows its own errors by design, so a write that never
+    # lands leaves the original vector in place and the count unchanged. That
+    # is exactly how INSERT OR REPLACE against a vec0 table shipped, leaving
+    # every edited memory findable only under its old wording.
+    assert await _stored_vector(conn, node.id) != before
+
+
+async def test_reindexing_survives_repeated_edits(conn: aiosqlite.Connection) -> None:
+    """Editing the same memory again must not accumulate vectors."""
+    node = await create_node(conn, NodeCreate(type="idea", title="A", summary="s"))
+    for title in ("B", "C", "D"):
+        await update_node(conn, node.id, NodeUpdate(title=title))
     assert await vectors.count(conn) == 1
 
 
@@ -82,7 +108,7 @@ async def test_exact_keyword_still_wins(conn: aiosqlite.Connection) -> None:
     """Semantic ranking must not drown out literal matches."""
     await create_node(
         conn,
-        NodeCreate(type="fact", title="Postgres tuning", summary="database notes"),
+        NodeCreate(type="finding", title="Postgres tuning", summary="database notes"),
     )
     await create_node(
         conn, NodeCreate(type="idea", title="Unrelated", summary="something else")
@@ -134,7 +160,7 @@ async def test_keyword_mode_admits_only_text_matches(
 ) -> None:
     """The point of the mode: nothing arrives on similarity alone."""
     await create_node(
-        conn, NodeCreate(type="fact", title="Postgres tuning", summary="database")
+        conn, NodeCreate(type="finding", title="Postgres tuning", summary="database")
     )
     await create_node(
         conn, NodeCreate(type="idea", title="Unrelated", summary="something else")
@@ -148,11 +174,11 @@ async def test_keyword_mode_admits_only_text_matches(
 async def test_keyword_mode_honours_a_phrase(conn: aiosqlite.Connection) -> None:
     await create_node(
         conn,
-        NodeCreate(type="fact", title="Local-first memory graph", summary="s"),
+        NodeCreate(type="finding", title="Local-first memory graph", summary="s"),
     )
     await create_node(
         conn,
-        NodeCreate(type="fact", title="Graph of the memory", summary="s"),
+        NodeCreate(type="finding", title="Graph of the memory", summary="s"),
     )
 
     results = await search(conn, '"memory graph"', limit=5, mode="keyword")
@@ -161,7 +187,7 @@ async def test_keyword_mode_honours_a_phrase(conn: aiosqlite.Connection) -> None
 
 async def test_keyword_mode_needs_no_embedder(conn: aiosqlite.Connection) -> None:
     """Nothing is embedded, so the mode answers before the model is downloaded."""
-    await create_node(conn, NodeCreate(type="fact", title="Offline", summary="s"))
+    await create_node(conn, NodeCreate(type="finding", title="Offline", summary="s"))
     set_embedder(None)
 
     results = await search(conn, "Offline", limit=5, mode="keyword")
@@ -170,7 +196,9 @@ async def test_keyword_mode_needs_no_embedder(conn: aiosqlite.Connection) -> Non
 
 async def test_search_survives_without_vectors(conn: aiosqlite.Connection) -> None:
     """With the extension unavailable, keyword search must still answer."""
-    await create_node(conn, NodeCreate(type="fact", title="Keyword only", summary="s"))
+    await create_node(
+        conn, NodeCreate(type="finding", title="Keyword only", summary="s")
+    )
     vectors._enabled.discard(conn)
     try:
         results = await search(conn, "Keyword", limit=5)

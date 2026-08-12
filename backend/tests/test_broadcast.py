@@ -67,7 +67,7 @@ async def test_new_node_event_payload(
     a = await create_node(
         conn, NodeCreate(type="idea", title="A", summary="s", content="# body")
     )
-    b = await create_node(conn, NodeCreate(type="fact", title="B", summary="s"))
+    b = await create_node(conn, NodeCreate(type="finding", title="B", summary="s"))
     edge = await create_edge(
         conn, EdgeCreate(source_id=a.id, target_id=b.id, relation_type="relates_to")
     )

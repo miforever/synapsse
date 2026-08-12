@@ -35,6 +35,51 @@ const SECTIONS = [
 
 export type Section = (typeof SECTIONS)[number]["slug"];
 
+/**
+ * The glass lozenge that follows whatever is current.
+ *
+ * Sliding rather than lighting up in place: with a background on each item the
+ * highlight blinks from one to the next and the two read as separate events,
+ * where one object travelling reads as the same selection moving. It is also
+ * what the landing page's nav does, and the bar is meant to be the same object
+ * in both places.
+ *
+ * Measured from the DOM rather than computed, because the items are text of
+ * different widths and the bar itself changes size when the modes unfold. A
+ * ResizeObserver on the track and on each item is what keeps the indicator
+ * under its label for every frame of that, instead of arriving late and
+ * skating across afterwards.
+ */
+function useIndicator(activeKey: string) {
+  const track = useRef<HTMLDivElement>(null);
+  const [box, setBox] = useState<{ x: number; width: number } | null>(null);
+
+  useEffect(() => {
+    const element = track.current;
+    if (!element) return;
+
+    const measure = () => {
+      const current = element.querySelector<HTMLElement>("[data-current=true]");
+      setBox(
+        current ? { x: current.offsetLeft, width: current.offsetWidth } : null,
+      );
+    };
+
+    measure();
+
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    for (const item of element.children) observer.observe(item);
+    return () => observer.disconnect();
+  }, [activeKey]);
+
+  return { track, box };
+}
+
+/** Weighted toward settling rather than overshooting - this is a background
+ *  object, and a springy one competes with the label it sits under. */
+const SLIDE = { type: "spring", stiffness: 420, damping: 38, mass: 0.7 } as const;
+
 /** Sections with modes remember which one you were on; the rest have none. */
 const DEFAULT_MODE: Partial<Record<Section, string>> = { canvas: "3d" };
 
@@ -53,6 +98,8 @@ export function AppBar() {
     setMotion,
     reducedMotion,
     resetLayout,
+    untangle,
+    untangling,
     themePreference,
     chooseTheme,
   } = useGraphStore();
@@ -62,9 +109,17 @@ export function AppBar() {
   const [, section = "canvas", mode = ""] = pathname.split("/");
   const current = SECTIONS.find((item) => item.slug === section) ?? SECTIONS[0];
 
+  const sections = useIndicator(current.slug);
+  // Keyed on the section too: leaving the canvas unmounts the modes entirely,
+  // and the indicator has to re-measure when they come back.
+  const modes = useIndicator(`${current.slug}/${mode}`);
+
   // Each section counts what it is about: the canvas counts memories, the
   // roadmap counts the ones that are work.
   const onRoadmap = current.slug === "roadmap";
+  // Arranging the canvas means nothing on the roadmap or the board, which draw
+  // their own layouts from the same graph.
+  const onCanvas = current.slug === "canvas";
   const count = onRoadmap
     ? data.nodes.filter((node) => node.status).length
     : data.nodes.length;
@@ -151,7 +206,24 @@ export function AppBar() {
       */}
       <div className="pointer-events-none absolute inset-x-0 top-5 z-30 flex justify-center">
         <div className="glass-panel pointer-events-auto flex items-center rounded-full px-1.5 py-1">
-          <nav className="flex items-center">
+          <nav ref={sections.track} className="relative flex items-center">
+            {/*
+              Inset rather than centred with a translate: framer writes the
+              element's transform to move it, so a translate of our own would
+              be overwritten and the lozenge would sit half a row too low.
+            */}
+            {sections.box && (
+              <motion.span
+                aria-hidden
+                // No entrance: it belongs wherever the current section is, and
+                // sliding in from the left on first paint would announce a
+                // change that has not happened.
+                initial={false}
+                animate={{ x: sections.box.x, width: sections.box.width }}
+                transition={SLIDE}
+                className="absolute inset-y-0 left-0 rounded-full bg-elevated/10 shadow-[inset_0_1px_0_rgb(255_255_255/8%)]"
+              />
+            )}
             {SECTIONS.map((item) => {
               const active = item.slug === current.slug;
               return (
@@ -164,10 +236,9 @@ export function AppBar() {
                       : undefined,
                   )}
                   aria-current={active ? "page" : undefined}
-                  className={`rounded-full px-3 py-1 text-xs font-medium transition ${
-                    active
-                      ? "bg-elevated/10 text-strong"
-                      : "text-faint hover:text-muted"
+                  data-current={active}
+                  className={`relative z-10 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                    active ? "text-strong" : "text-faint hover:text-muted"
                   }`}
                 >
                   {item.label}
@@ -194,23 +265,39 @@ export function AppBar() {
                 className="flex items-center overflow-hidden"
               >
                 <span className="mx-1.5 h-4 w-px shrink-0 bg-elevated/10" />
-                {current.modes.map((item) => {
-                  const active = item.slug === mode;
-                  return (
-                    <Link
-                      key={item.slug}
-                      href={`/${current.slug}/${item.slug}`}
-                      aria-current={active ? "true" : undefined}
-                      className={`block shrink-0 rounded-full px-2.5 py-1 font-mono text-[10px] uppercase tracking-widest transition ${
-                        active
-                          ? "bg-cyan/15 text-cyan"
-                          : "text-faint hover:text-muted"
-                      }`}
-                    >
-                      {item.label}
-                    </Link>
-                  );
-                })}
+                <span ref={modes.track} className="relative flex items-center">
+                  {/*
+                    Measured inside the group that is unfolding, so the
+                    indicator rides the reveal instead of chasing it. The
+                    observer on each item is what makes that work: their
+                    offsets change every frame while the bar grows.
+                  */}
+                  {modes.box && (
+                    <motion.span
+                      aria-hidden
+                      initial={false}
+                      animate={{ x: modes.box.x, width: modes.box.width }}
+                      transition={SLIDE}
+                      className="absolute inset-y-0 left-0 rounded-full bg-cyan/15"
+                    />
+                  )}
+                  {current.modes.map((item) => {
+                    const active = item.slug === mode;
+                    return (
+                      <Link
+                        key={item.slug}
+                        href={`/${current.slug}/${item.slug}`}
+                        aria-current={active ? "true" : undefined}
+                        data-current={active}
+                        className={`relative z-10 block shrink-0 rounded-full px-2.5 py-1 font-mono text-[10px] uppercase tracking-widest transition-colors ${
+                          active ? "text-cyan" : "text-faint hover:text-muted"
+                        }`}
+                      >
+                        {item.label}
+                      </Link>
+                    );
+                  })}
+                </span>
               </motion.div>
             )}
           </AnimatePresence>
@@ -232,6 +319,8 @@ export function AppBar() {
           onMotionChange={setMotion}
           reducedMotion={reducedMotion}
           onResetLayout={resetLayout}
+          onUntangle={onCanvas ? untangle : undefined}
+          untangling={untangling}
           theme={themePreference}
           onThemeChange={chooseTheme}
         />

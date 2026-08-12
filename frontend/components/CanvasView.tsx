@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { type CanvasMode, GraphCanvas } from "@/components/GraphCanvas";
 import { useGraphStore } from "@/components/GraphProvider";
@@ -30,7 +30,7 @@ export function CanvasView({ mode }: { mode: CanvasMode }) {
   const { width, height } = useElementSize(container);
 
   const graphRef = useRef<ForceGraphHandle | null>(null);
-  const { data, nodesById, loading, error, motion, markMoved, theme } =
+  const { data, nodesById, loading, error, motion, markMoved, canvasFit, theme } =
     useGraphStore();
   const { settings } = useSettings();
 
@@ -70,6 +70,45 @@ export function CanvasView({ mode }: { mode: CanvasMode }) {
       graph.zoom?.(3, 800);
     }
   }, []);
+
+  /*
+   * Frame whatever the graph has just been arranged into.
+   *
+   * Registered upward rather than called from the bar directly: the renderer
+   * handle only exists here, and an untangled graph that lands half outside
+   * the viewport has thrown away most of what the arrangement was for.
+   *
+   * Measured from the nodes rather than through getGraphBbox, which
+   * over-reports badly enough to pull a 3D camera roughly three times too far
+   * out - the same reason the initial framing measures them too.
+   */
+  useEffect(() => {
+    canvasFit.current = () => {
+      const graph = graphRef.current;
+      if (!graph) return;
+
+      if (mode === "2d") {
+        graph.zoomToFit?.(800, 90);
+        return;
+      }
+
+      const nodes = data.nodes as (GraphNode & { x?: number; y?: number })[];
+      let radius = 0;
+      for (const node of nodes) {
+        radius = Math.max(radius, Math.hypot(node.x ?? 0, node.y ?? 0));
+      }
+      if (radius <= 0) return;
+
+      // Half of the renderer's default 50 degree vertical field of view.
+      const distance = (radius / Math.tan((25 * Math.PI) / 180)) * 1.15;
+      suspendOrbit(1200);
+      graph.cameraPosition?.({ x: 0, y: 0, z: distance }, { x: 0, y: 0, z: 0 }, 800);
+    };
+
+    return () => {
+      canvasFit.current = null;
+    };
+  }, [canvasFit, mode, data.nodes]);
 
   const handleSelect = useCallback(
     (node: GraphNode) => {

@@ -3,7 +3,7 @@
  *
  * The board answers "where does everything stand". This answers a different
  * question — "what is the order" — and the graph already holds the answer in
- * its `depends_on` and `blocks` edges. Steps are levels of that dependency
+ * its `depends_on` edges. Steps are levels of that dependency
  * graph: everything in a level can be done at once, and nothing in it can
  * start until the level above is finished.
  *

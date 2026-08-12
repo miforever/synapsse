@@ -32,18 +32,16 @@ const MCP_URL = "http://localhost:8000/mcp";
  */
 const CLIENTS = [
   {
-    id: "ask",
-    name: "Just ask it",
-    where: "Paste into the agent's chat — it will do the rest",
-    code: `Add an MCP server named "synapsse" at ${MCP_URL}, using streamable HTTP transport. Then list its tools so we can confirm it connected.`,
-    note: "Most agents can edit their own MCP config. The tabs beside this one are for when yours cannot, or when you would rather do it yourself",
-  },
-  {
     id: "claude",
     name: "Claude Code",
     where: "One command, from anywhere",
-    code: `claude mcp add --transport http synapsse ${MCP_URL}`,
-    note: "Or commit the same server to a project in .mcp.json",
+    code: `claude mcp add --scope user --transport http synapsse ${MCP_URL}`,
+    note: "--scope user puts it in every project; drop it for this one only, or commit the server to a repo in .mcp.json",
+    prompt: `Set up SYNAPSSE, my local memory graph, and use it from now on.
+
+1. Add the MCP server: claude mcp add --scope user --transport http synapsse ${MCP_URL} — the --scope user matters, it registers the server for every project rather than only this folder.
+2. Make recall automatic: add a UserPromptSubmit command hook in ~/.claude/settings.json running python3 /full/path/to/synapsse/hooks/synapsse_recall.py, alongside any hooks already there rather than replacing them. Ask me where the folder is if you cannot find it.
+3. Then tell me what I have to do myself: restart for the MCP tools to attach (claude --continue keeps this conversation), and open /hooks once so the new hook is read.`,
   },
   {
     id: "cursor",
@@ -55,6 +53,11 @@ const CLIENTS = [
   }
 }`,
     note: "Or .cursor/mcp.json, to keep it to one project",
+    prompt: `Set up SYNAPSSE, my local memory graph, and use it from now on.
+
+1. Add the MCP server to ~/.cursor/mcp.json, so it is there in every project: {"mcpServers":{"synapsse":{"url":"${MCP_URL}"}}} — use .cursor/mcp.json instead only if I tell you I want it in this project alone.
+2. Add a standing rule wherever you keep them: write to SYNAPSSE as you work — preferences, decisions and their reasons, people, problems and what fixed them — and search it before asking me something I may have already answered.
+3. Then tell me to restart, since MCP servers are connected when a session starts and this one cannot see the server it just added.`,
   },
   {
     id: "gemini",
@@ -66,6 +69,11 @@ const CLIENTS = [
   }
 }`,
     note: "The key is httpUrl — that is what Gemini CLI uses for HTTP servers",
+    prompt: `Set up SYNAPSSE, my local memory graph, and use it from now on.
+
+1. Add the MCP server to ~/.gemini/settings.json: {"mcpServers":{"synapsse":{"httpUrl":"${MCP_URL}"}}} — the key is httpUrl, which is what Gemini CLI uses for streamable HTTP.
+2. Add a standing rule wherever you keep them: write to SYNAPSSE as you work — preferences, decisions and their reasons, people, problems and what fixed them — and search it before asking me something I may have already answered.
+3. Then tell me to restart, since MCP servers are connected when a session starts and this one cannot see the server it just added.`,
   },
   {
     id: "antigravity",
@@ -77,6 +85,23 @@ const CLIENTS = [
   }
 }`,
     note: "In the IDE: Manage MCP Servers → View raw config. The key is serverUrl",
+    prompt: `Set up SYNAPSSE, my local memory graph, and use it from now on.
+
+1. Add the MCP server to ~/.gemini/config/mcp_config.json: {"mcpServers":{"synapsse":{"serverUrl":"${MCP_URL}"}}} — the key is serverUrl.
+2. Add a standing rule wherever you keep them: write to SYNAPSSE as you work — preferences, decisions and their reasons, people, problems and what fixed them — and search it before asking me something I may have already answered.
+3. Then tell me to restart, since MCP servers are connected when a session starts and this one cannot see the server it just added.`,
+  },
+  {
+    id: "other",
+    name: "Anything else",
+    where: "Any client that speaks MCP",
+    code: MCP_URL,
+    note: "Point it at that URL over streamable HTTP, in whichever file it keeps its servers in",
+    prompt: `Set up SYNAPSSE, my local memory graph, and use it from now on.
+
+1. Add an MCP server named "synapsse" at ${MCP_URL} using streamable HTTP transport. Register it for every project rather than only the one we are in — use the widest scope your configuration offers.
+2. If you support hooks that run on every message I send, register hooks/synapsse_recall.py from the synapsse folder as one, alongside any hooks already configured rather than replacing them. If you do not: add a standing rule wherever you keep them: write to SYNAPSSE as you work — preferences, decisions and their reasons, people, problems and what fixed them — and search it before asking me something I may have already answered.
+3. Then tell me plainly what I have to do myself before either takes effect — the restart that attaches the MCP tools, and the reload that picks up the hook.`,
   },
 ] as const;
 
@@ -85,6 +110,8 @@ const TRIGGERS = [
   "A decision is made, with a reason worth keeping",
   "It learns something durable about a person or client",
   "A problem is diagnosed — and again when something fixes it",
+  "A constraint surfaces that will still be true next week",
+  "You change your mind about something already decided",
 ];
 
 const EASE = [0.22, 1, 0.36, 1] as const;
@@ -114,16 +141,28 @@ function CopyIcon({ copied }: { copied: boolean }) {
   );
 }
 
-function CopyBlock({ code }: { code: string }) {
+function CopyBlock({ code, clamped = false }: { code: string; clamped?: boolean }) {
   const [copied, setCopied] = useState(false);
+  // Only the prompts clip. A command you cannot read whole is one you cannot
+  // trust, so the per-client snippets never do.
+  const [open, setOpen] = useState(false);
+  const clipped = clamped && !open;
 
   return (
     <div className="group/copy relative mt-2.5">
-      {/* Wrapped and never truncated: a command you cannot read whole is a
-          command you cannot trust, and this is the first thing anyone runs. */}
-      <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-lg border border-line/[.1] bg-canvas/40 py-3 pl-3.5 pr-11 font-mono text-xs leading-relaxed text-cyan">
+      <pre
+        className={`overflow-x-auto whitespace-pre-wrap break-all rounded-lg border border-line/[.1] bg-canvas/40 py-3 pl-3.5 pr-11 font-mono text-xs leading-relaxed text-cyan ${
+          clipped ? "max-h-[5.4em] overflow-y-hidden" : ""
+        }`}
+      >
         {code}
       </pre>
+      {clipped && (
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-px bottom-px h-10 rounded-b-lg bg-gradient-to-b from-transparent to-canvas"
+        />
+      )}
       <button
         type="button"
         onClick={() => {
@@ -142,6 +181,17 @@ function CopyBlock({ code }: { code: string }) {
       >
         <CopyIcon copied={copied} />
       </button>
+
+      {clamped && (
+        <button
+          type="button"
+          onClick={() => setOpen((value) => !value)}
+          aria-expanded={open}
+          className="mt-2 font-mono text-[11px] text-cyan/70 transition-colors hover:text-cyan"
+        >
+          {open ? "− collapse it again" : "+ read the whole prompt"}
+        </button>
+      )}
     </div>
   );
 }
@@ -205,6 +255,17 @@ function ConnectPanel() {
             <p className="mt-2 text-[11px] leading-relaxed text-faint">
               {client.note}
             </p>
+
+            {/* Per client, not shared: each keeps its servers in a different
+                file, and only Claude Code has a hook to register. */}
+            <div className="mt-4 border-t border-line/[.08] pt-3">
+              <p className="text-xs text-muted">Or just say it</p>
+              <p className="mt-1 text-[11px] leading-relaxed text-faint">
+                Paste this instead, and the assistant does all of the above
+                itself — plus the recall hook.
+              </p>
+              <CopyBlock code={client.prompt} clamped />
+            </div>
           </motion.div>
         </AnimatePresence>
       </div>

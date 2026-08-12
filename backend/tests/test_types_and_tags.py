@@ -1,6 +1,7 @@
 import aiosqlite
 import pytest
 
+from app.core.fields import FALLBACK_CLASS, NODE_CLASSES
 from app.core.slug import slugify
 from app.memories.models import NodeCreate
 from app.memories.nodes import create_node, get_node
@@ -21,23 +22,40 @@ def test_slugify_rejects_empty() -> None:
 
 
 async def test_default_types_are_seeded(conn: aiosqlite.Connection) -> None:
-    names = set(await list_types(conn))
-    assert {"person", "project", "idea", "fact", "object", "place"} <= names
+    """Every class in the set, and nothing else."""
+    assert set(await list_types(conn)) == set(NODE_CLASSES)
 
 
-async def test_unknown_type_is_auto_registered(conn: aiosqlite.Connection) -> None:
+async def test_unknown_class_is_kept_as_a_tag(conn: aiosqlite.Connection) -> None:
+    """The write survives, the word survives, the taxonomy does not grow."""
     node = await create_node(
         conn, NodeCreate(type="Retrospective", title="R", summary="s")
     )
-    assert node.type == "retrospective"
-    assert "retrospective" in await list_types(conn)
+    assert node.type == FALLBACK_CLASS
+    assert "retrospective" in node.tags
+    assert "retrospective" not in await list_types(conn)
 
 
-async def test_type_variants_collapse_to_one_class(conn: aiosqlite.Connection) -> None:
-    before = len(await list_types(conn))
-    for variant in ("Task", "task", " TASK "):
+async def test_the_class_set_does_not_grow(conn: aiosqlite.Connection) -> None:
+    before = set(await list_types(conn))
+    for variant in ("Task", "task", " TASK ", "Retrospective"):
         await create_node(conn, NodeCreate(type=variant, title="T", summary="s"))
-    assert len(await list_types(conn)) == before + 1
+    assert set(await list_types(conn)) == before
+
+
+async def test_class_variants_normalise(conn: aiosqlite.Connection) -> None:
+    for variant in ("Person", " PERSON ", "person"):
+        node = await create_node(conn, NodeCreate(type=variant, title="P", summary="s"))
+        assert node.type == "person"
+
+
+async def test_a_real_class_keeps_its_tags_alone(conn: aiosqlite.Connection) -> None:
+    node = await create_node(
+        conn,
+        NodeCreate(type="person", title="Ada", summary="s", tags=["girlfriend"]),
+    )
+    assert node.type == "person"
+    assert node.tags == ["girlfriend"]
 
 
 async def test_tags_round_trip(conn: aiosqlite.Connection) -> None:
@@ -56,7 +74,7 @@ async def test_find_nodes_by_tag(conn: aiosqlite.Connection) -> None:
     node = await create_node(
         conn, NodeCreate(type="plan", title="P", summary="s", tags=["roadmap"])
     )
-    await create_node(conn, NodeCreate(type="fact", title="F", summary="s"))
+    await create_node(conn, NodeCreate(type="finding", title="F", summary="s"))
 
     assert await find_nodes_by_tag(conn, "roadmap") == [node.id]
 

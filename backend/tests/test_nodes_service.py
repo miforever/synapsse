@@ -2,7 +2,8 @@ import aiosqlite
 
 from app.memories.edges import create_edge, list_edges_for_node, traverse_graph
 from app.memories.models import EdgeCreate, NodeCreate
-from app.memories.nodes import create_node, get_node, search_index
+from app.memories.nodes import create_node, get_node
+from app.search.service import search
 
 
 async def test_create_and_get_node(conn: aiosqlite.Connection) -> None:
@@ -26,7 +27,7 @@ async def test_search_index_finds_node(conn: aiosqlite.Connection) -> None:
             content="Runs on aiosqlite with FTS5 search",
         ),
     )
-    results = await search_index(conn, "aiosqlite")
+    results = await search(conn, "aiosqlite", mode="keyword")
     assert len(results) == 1
     assert results[0].title == "Synapsse Daemon"
 

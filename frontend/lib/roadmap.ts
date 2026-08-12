@@ -62,9 +62,9 @@ function isOverdue(node: GraphNode, today: string): boolean {
 /**
  * Group the graph's work into lanes, with its dependencies resolved.
  *
- * Only `depends_on` and `blocks` are read. `relates_to` is the graph's way of
- * saying two memories belong together, which is true of most of them and tells
- * a roadmap nothing about order.
+ * Only `depends_on` is read. `relates_to` is the graph's way of saying two
+ * memories belong together, which is true of most of them and tells a roadmap
+ * nothing about order.
  */
 export function buildRoadmap(
   nodes: readonly GraphNode[],
@@ -91,9 +91,6 @@ export function buildRoadmap(
     if (edge.relation_type === "depends_on") {
       items.get(source)?.blockedBy.push(target);
       items.get(target)?.blocking.push(source);
-    } else if (edge.relation_type === "blocks") {
-      items.get(target)?.blockedBy.push(source);
-      items.get(source)?.blocking.push(target);
     }
   }
 
