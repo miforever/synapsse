@@ -261,16 +261,19 @@ function Row({
 /**
  * One thing you can do to the canvas: a mark and its name, on one line.
  *
- * The two are not equals and are no longer drawn as though they were. Two
- * matched slabs said press either, they are the same kind of thing, when one
- * is the reason the menu gets opened and the other is a way back you reach for
- * once a month. Weight follows that: Untangle is the only object in the panel
- * wearing the accent, and Reset gives up its box entirely and sits under it as
- * a line of text that brightens when you go to it.
+ * The two are not equals, but the difference is a fill, not a colour: Untangle
+ * carries a faint surface and Reset does not, which is enough to say which one
+ * the menu was opened for.
  *
- * Spending the accent exactly once is the point. A cyan rim on both would make
- * neither of them the answer to what do I press, and the colour already means
- * something everywhere else on the canvas.
+ * No accent anywhere, resting or hovered. Cyan means exactly one thing in this
+ * panel - the selected theme, the switch that is on - so a button wearing it
+ * reads as a third thing that is currently active, and its neighbour then
+ * reads as the one switched off. Hovering here does what hovering does on the
+ * rows below: a faint fill and the text coming up to full. One panel, one
+ * behaviour.
+ *
+ * Reset is muted rather than faint for the same reason: faint is the grey this
+ * interface uses for controls that cannot be used.
  *
  * The hint hangs off the wrapper, not off the button. A disabled control
  * dispatches no pointer events at all, so a button that explained itself
@@ -306,13 +309,10 @@ function Action({
         onClick={onClick}
         disabled={disabled}
         aria-label={`${name}. ${hint}`}
-        className={`flex w-full items-center gap-2.5 rounded-[14px] px-2.5 text-left transition disabled:cursor-not-allowed disabled:opacity-40 ${
+        className={`flex w-full items-center gap-2.5 rounded-[14px] border px-2.5 py-2 text-left transition hover:border-line/[.22] hover:bg-elevated/[.07] hover:text-strong disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-line/[.1] disabled:hover:bg-transparent ${
           primary
-            ? // Glass with a lit top edge and a glow that sits just outside
-              // it, so the button reads as raised out of the panel rather than
-              // painted onto it.
-              "border border-cyan/25 bg-cyan/[.07] py-2 text-strong shadow-[inset_0_1px_0_rgb(255_255_255/8%),0_0_20px_-8px_rgb(var(--accent)/70%)] hover:border-cyan/40 hover:bg-cyan/[.12] hover:shadow-[inset_0_1px_0_rgb(255_255_255/10%),0_0_24px_-6px_rgb(var(--accent)/90%)] active:bg-cyan/[.05] disabled:hover:border-cyan/25 disabled:hover:bg-cyan/[.07]"
-            : "py-[7px] text-faint hover:bg-elevated/[.07] hover:text-strong"
+            ? "border-line/[.14] bg-elevated/[.06] text-strong shadow-[inset_0_1px_0_rgb(255_255_255/5%)]"
+            : "border-line/[.1] text-muted"
         }`}
       >
         <Icon
@@ -458,9 +458,12 @@ export function SettingsPanel({
                       aria-hidden
                       layoutId="theme-plate"
                       transition={SLIDE}
-                      // Glass rather than a flat fill: a lit top edge, a shadow
-                      // beneath, and the track showing through.
-                      className="absolute inset-0 rounded-full bg-raised/80 shadow-[0_1px_3px_rgb(0_0_0/28%),inset_0_1px_0_rgb(255_255_255/10%)] backdrop-blur-sm"
+                      // Lighter than its track, with a lit top edge - the same
+                      // plate the navigation pill uses. In `raised` it came out
+                      // darker than the track on a dark theme, so the chosen
+                      // cell read as a hole punched in the control rather than
+                      // as the one sitting on top.
+                      className="absolute inset-0 rounded-full bg-elevated/10 shadow-[0_1px_3px_rgb(0_0_0/25%),inset_0_1px_0_rgb(255_255_255/9%)]"
                     />
                   )}
                   <Icon name={option.icon} className="relative h-3 w-3" />

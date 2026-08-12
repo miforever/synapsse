@@ -20,6 +20,75 @@ export function setGlowTheme(next: "dark" | "light"): void {
 
 export const GLOW_SIZE = 128;
 
+/** Tilt toward the viewer. Straight on, every parallel is a flat line and the
+ *  node is a striped disc rather than a sphere. */
+const TILT = 0.34;
+
+/**
+ * A globe's wireframe, drawn inside a node: meridians sharing the poles,
+ * parallels crowding as they climb. Few lines on purpose - this is 128px and
+ * seen at a fraction of it, and a full graticule shrinks into haze.
+ *
+ * Built once per colour, like the disc it sits in, so it costs nothing per
+ * frame.
+ */
+function graticule(
+  ctx: CanvasRenderingContext2D,
+  centre: number,
+  radius: number,
+): void {
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(centre, centre, radius, 0, Math.PI * 2);
+  ctx.clip();
+
+  // White, not the memory's hue: the body is already near full colour, so a
+  // grid in that same hue has nothing to be brighter than.
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.3)";
+  ctx.lineWidth = GLOW_SIZE * 0.0095;
+
+  // Meridians: as tall as the sphere, as wide as their own longitude.
+  for (const longitude of [Math.PI / 4, Math.PI / 2.4]) {
+    ctx.beginPath();
+    ctx.ellipse(
+      centre,
+      centre,
+      radius * Math.sin(longitude),
+      radius,
+      0,
+      0,
+      Math.PI * 2,
+    );
+    ctx.stroke();
+  }
+
+  // The one facing you has no width left to be an ellipse.
+  ctx.beginPath();
+  ctx.moveTo(centre, centre - radius);
+  ctx.lineTo(centre, centre + radius);
+  ctx.stroke();
+
+  // Parallels: each at the height of its latitude, as wide as the sphere is
+  // there - which is what crowds them toward the poles instead of stacking
+  // them like rungs.
+  for (const latitude of [-Math.PI / 3, -Math.PI / 6, 0, Math.PI / 6, Math.PI / 3]) {
+    const width = radius * Math.cos(latitude);
+    ctx.beginPath();
+    ctx.ellipse(
+      centre,
+      centre - radius * Math.sin(latitude) * Math.cos(TILT),
+      width,
+      width * Math.sin(TILT),
+      0,
+      0,
+      Math.PI * 2,
+    );
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
 export function glowCanvas(color: string): HTMLCanvasElement | null {
   const key = `${theme}:${color}`;
   const cached = cache.get(key);
@@ -61,33 +130,19 @@ export function glowCanvas(color: string): HTMLCanvasElement | null {
     /*
      * A hologram, not a bead.
      *
-     * The disc used to be brightest at its centre and fade outward, which is
-     * the profile of a glowing ball - lit from within, solid, and read by the
-     * eye as a shiny object. A projected sphere does the opposite. You are
-     * looking through it, so you see the least of it dead centre where the
-     * shell is face-on and thin, and the most at the edge where your line of
-     * sight runs along the shell for its whole length. That limb brightening is
-     * the whole cue, and it costs one extra gradient stop.
-     *
-     * Nothing here is a specular highlight. A shine is an off-centre white
-     * blob, and it says hard surface under a light; every stop below is the
-     * memory's own hue, symmetrical, with the centre only lifted rather than
-     * blown out. Light passes through this, it does not bounce off it.
+     * Brightest at the centre is the profile of a lit ball, and reads as a
+     * shiny object. A projected sphere is brightest at the limb, where the line
+     * of sight runs along the shell instead of crossing it. No specular
+     * anywhere: a shine is an off-centre white blob, and every stop here is the
+     * memory's own hue, symmetrical.
      */
     const gradient = ctx.createRadialGradient(half, half, 0, half, half, half);
-    // Lit all the way through. Hollowing the middle out turns the node into a
-    // ring with a hole in it, which is a portal, not a projection.
-    gradient.addColorStop(0, `${color}B8`);
-    gradient.addColorStop(0.18, `${color}A3`);
-    /*
-     * The limb, lifted only a little above the body.
-     *
-     * A projected sphere is brightest at its edge, where your line of sight
-     * runs along the shell for its whole length rather than crossing it once.
-     * The lift has to stay small: push it and the node stops being a sphere
-     * and becomes a neon ring, which is the loudest thing on a dark canvas and
-     * exactly the shine this is meant to lose.
-     */
+    // Lit all the way through - hollowing the middle turns the node into a ring
+    // with a hole in it.
+    gradient.addColorStop(0, `${color}9E`);
+    gradient.addColorStop(0.18, `${color}8F`);
+    // The limb, lifted only a little: push it and the sphere becomes a neon
+    // ring, which is the loudest thing on a dark canvas.
     gradient.addColorStop(0.4, `${color}E0`);
     gradient.addColorStop(0.5, `${color}5C`);
     // Bloom, so it sits in the scene rather than being cut out of it.
@@ -99,37 +154,15 @@ export function glowCanvas(color: string): HTMLCanvasElement | null {
     ctx.arc(half, half, half, 0, Math.PI * 2);
     ctx.fill();
 
-    /*
-     * The silhouette, drawn as a line.
-     *
-     * A gradient alone has no edge, it just runs out, and a node without an
-     * edge is a smudge. Faint enough to be a boundary rather than an outline.
-     */
+    // A gradient has no edge, it just runs out, and a node without one is a
+    // smudge. Faint enough to be a boundary rather than an outline.
     ctx.strokeStyle = `${color}59`;
     ctx.lineWidth = GLOW_SIZE * 0.014;
     ctx.beginPath();
     ctx.arc(half, half, half * 0.44, 0, Math.PI * 2);
     ctx.stroke();
 
-    /*
-     * Scan lines, clipped inside the shell.
-     *
-     * What separates a projection from a marble: a hologram is built out of
-     * light in rows and shows it. Drawn in the background's own colour rather
-     * than the memory's, so they read as the gaps between rows instead of
-     * extra light, and kept at the very bottom of visible - any stronger and a
-     * canvas of them is a moire field rather than a graph.
-     */
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(half, half, half * 0.44, 0, Math.PI * 2);
-    ctx.clip();
-    ctx.fillStyle = "rgba(10, 8, 20, 0.22)";
-    const step = GLOW_SIZE * 0.042;
-    for (let y = half * 0.56; y < half * 1.44; y += step) {
-      ctx.fillRect(0, y, GLOW_SIZE, GLOW_SIZE * 0.009);
-    }
-    ctx.restore();
+    graticule(ctx, half, half * 0.44);
   }
 
   cache.set(key, canvas);
