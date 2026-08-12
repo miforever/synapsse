@@ -475,14 +475,8 @@ Issues and pull requests are welcome. A few things that will make review quick:
 
 ## License
 
-[PolyForm Noncommercial 1.0.0](LICENSE) — free for any noncommercial purpose:
-personal use, study, hobby projects, research, and use by charities, schools
-and public institutions. You may read it, run it, change it and share your
-changes, provided the notices travel with it.
+[MIT](LICENSE). Use it for anything, personal or commercial, including inside
+a product you sell. Keep the notice with it and that is the whole obligation.
 
-Commercial use is not granted by this licence. If you want it for a business,
-[open an issue](https://github.com/miforever/synapsse/issues).
-
-Note on wording: this is **source-available**, not open source in the OSI
-sense — the definition does not permit a restriction on the field of use. It
-is deliberate, and the distinction is worth being accurate about.
+A memory layer nobody may use at work is a memory layer nobody uses, since
+work is where the context worth keeping accumulates.

@@ -2,7 +2,7 @@
   "name": "synapsse-frontend",
   "version": "0.1.0",
   "private": true,
-  "license": "LicenseRef-PolyForm-Noncommercial-1.0.0",
+  "license": "MIT",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

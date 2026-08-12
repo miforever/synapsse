@@ -1,7 +1,7 @@
 [project]
 name = "synapsse-backend"
 version = "0.1.0"
-license = "LicenseRef-PolyForm-Noncommercial-1.0.0"
+license = "MIT"
 description = "SYNAPSSE local-first memory graph daemon backend"
 requires-python = ">=3.11"
 dependencies = [
