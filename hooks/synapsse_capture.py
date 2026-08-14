@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Catch the moment the user corrects the agent, and make it get written down.
+"""Catch the moment the user lays down a rule, and make it get written down.
 
 Recall was the first half of the problem: agents do not search, so the search
 was taken away from them and moved into a hook. Writing is the same failure in
@@ -10,7 +10,7 @@ up holding whatever someone remembered to save, which is nothing.
 The write side cannot be automated the same way, because the decision needs the
 turn to have happened and it has side effects. What it can do is stop guessing
 *when*. There is one moment that is both easy to detect and worth more than any
-other: the user correcting the agent, or telling it how to behave. Those are the
+other: the user telling the agent how it should work from here on. Those are the
 memories that change every future session - do not guess, never use em dashes,
 that is not my name - and they arrive in a recognisable shape. No model needed
 to spot them.
@@ -21,11 +21,14 @@ what it was just told. The agent still does the writing, because it is the only
 thing here that understands the exchange; it simply no longer decides whether to
 bother.
 
-Deliberately narrow. It fires on corrections and standing instructions and
-nothing else, so a turn that taught nobody anything ends immediately. Precision
-over recall, because the cost of a false positive is a round trip the user is
-waiting on, and the cost of a store full of noise is that recall stops being
-worth injecting at all.
+Deliberately narrow. It fires on the phrasing of a standing instruction - from
+now on, never, i prefer - and not on the phrasing of an in-task correction. "No,
+wrong file" is the agent being steered, not taught, and a store that records
+every steer is a store nobody can find anything in. Precision over recall,
+because the cost of a false positive is a round trip the user is waiting on.
+
+Firing is a question, not a verdict: the agent that answers it is free to decide
+nothing here outlives the task and write nothing at all.
 """
 
 from __future__ import annotations
@@ -39,9 +42,7 @@ from pathlib import Path
 
 # Where the "already handled" marks live. Under the state directory rather than
 # beside the code: it is per-machine scratch, not part of the tool.
-STATE_DIR = Path(
-    os.environ.get("SYNAPSSE_STATE_DIR", "~/.cache/synapsse")
-).expanduser()
+STATE_DIR = Path(os.environ.get("SYNAPSSE_STATE_DIR", "~/.cache/synapsse")).expanduser()
 
 # Longer than this and it is a pasted log, a stack trace, or a spec. Those are
 # work, not instruction, whatever words happen to appear in them.
@@ -76,34 +77,7 @@ STRONG = re.compile(
   # "my name is not Rosso", "my stack is not django" - a fact about them being
   # put right, which is worth more than most things they volunteer unprompted.
   | my\s+\w+\s+is\s+not\b
-  # Ambiguous on its own: "the test shouldn't fail" is debugging, not
-  # instruction. Admitted anyway because a false fire costs one round trip in
-  # which the agent finds nothing worth writing, while a miss loses the rule
-  # for good.
-  | should\s?n'?t\b
     """,
-    re.IGNORECASE | re.VERBOSE,
-)
-
-# Words that only mean correction when the message opens with them. Mid-sentence
-# they are ordinary English: "no" in "no idea", "not" in "not sure if this is".
-LEADING = re.compile(
-    r"""^\W*(
-    # "no" opens a correction, but it also opens "no idea", "no worries" and
-    # "no rush", none of which are one.
-      no+(?!\s*(idea|clue|problem|worries|rush|thanks|thank))[,.!\s]
-    | nope
-    | wrong\b
-    | nah\b
-    | actually[,\s]
-    | incorrect\b
-    | (that'?s|it'?s|its)\s+not\b
-    | not\s+(like\s+)?that
-    | don'?t\b
-    | never\b
-    | always\b
-    | stop\b
-    )""",
     re.IGNORECASE | re.VERBOSE,
 )
 
@@ -113,43 +87,39 @@ EXPLICIT = re.compile(
     re.IGNORECASE,
 )
 
+# What the user sees. Claude Code prints a blocked stop under a fixed "Stop hook
+# error:" label, so this line has to survive that prefix and say, in one breath,
+# that nothing failed. The detail goes to the agent out of band, but this stays
+# self-sufficient in case a build declines to carry it.
+REASON = (
+    "SYNAPSSE capture - not a failure. If what the user just said outlives this "
+    "task, store it as a rule and say in one line what you stored; if it was a "
+    "one-off fix, write nothing and stop."
+)
+
 INSTRUCTION = """\
-The user just corrected you or told you how they want you to work. That is the \
-single most valuable kind of thing this store holds, and it is about to be lost \
-when this turn ends.
+SYNAPSSE: the user may have just told you something durable. Decide first.
 
-Record it in SYNAPSSE now, then continue:
+Does it still hold next week, in another file, on another task? A one-off fix - \
+this value, this file, this bug - is not a memory. Write nothing and end the turn.
 
-1. search_index for what they just told you. If a memory already covers it, \
-update_memory rather than adding a second one that says nearly the same thing.
-2. Write the rule, not the incident. "Wants X, because Y" outlives "asked for X \
-at 10pm on Tuesday". Include the reason when they gave one, and quote them when \
-the wording matters.
-3. One memory, one thing. Class it as `preference` for how they want to be \
-worked with, `constraint` for a hard rule, `decision` for a choice with a \
-reason behind it.
-4. Link it to the person or project it is about, or it will be unreachable.
-
-If it turns out they were correcting a fact about themselves rather than your \
-behaviour, fix the memory that held the wrong fact instead of writing a new one.
-
-Do not announce any of this. Write it, then answer whatever is still \
-outstanding, or stop if nothing is."""
+If it does hold: search_index first, update_memory if something already covers \
+it, otherwise store the rule rather than the incident, with their reason and \
+their wording. One memory, one thing, linked to the person or project. Then say \
+in one line what you stored."""
 
 
 def _looks_like_instruction(text: str) -> bool:
     """Whether this message is telling the agent something durable.
 
-    Three tests rather than one list, because the same word carries different
-    weight depending on where it sits: an explicit "remember this" always
-    counts, some phrases count anywhere, and the rest only count when the
-    message opens with them.
+    An explicit "remember this" always counts. Everything else has to carry the
+    phrasing of a standing instruction, wherever in the sentence it sits.
     """
     if EXPLICIT.search(text):
         return True
     if len(text) > MAX_PROMPT_CHARS:
         return False
-    return bool(STRONG.search(text) or LEADING.match(text))
+    return bool(STRONG.search(text))
 
 
 def _last_user_message(transcript: Path) -> tuple[str, str] | None:
@@ -234,7 +204,17 @@ def main() -> int:
     if _already_handled(str(event.get("session_id", "")), marker):
         return 0
 
-    json.dump({"decision": "block", "reason": INSTRUCTION}, sys.stdout)
+    json.dump(
+        {
+            "decision": "block",
+            "reason": REASON,
+            "hookSpecificOutput": {
+                "hookEventName": "Stop",
+                "additionalContext": INSTRUCTION,
+            },
+        },
+        sys.stdout,
+    )
     return 0
 
 
