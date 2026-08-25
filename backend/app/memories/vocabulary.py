@@ -16,7 +16,7 @@ from app.memories import tags as tags_service
 async def list_vocabulary() -> dict[str, object]:
     """The classes a memory can take, the tags in use, and what the canvas renders.
 
-    `classes` is fixed — those thirteen are all there are, and a word that is
+    `classes` is fixed — the list returned is all there are, and a word that is
     not among them becomes a tag. `tags` is open and comes with usage counts:
     reuse one that is already carrying memories rather than minting a synonym
     beside it. `renders` says which attachments the canvas will display, so

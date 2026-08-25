@@ -285,15 +285,19 @@ normalise before it could answer.
 
 Nodes are organized two ways:
 
-- **Class** — exactly one per node, from a fixed thirteen: entities (`person`,
-  `organization`, `place`, `object`), work (`project`, `plan`, `issue`,
-  `event`), and knowledge (`idea`, `fact`, `decision`, `preference`,
-  `resource`). Closed on purpose — the canvas paints a colour per class, and a
+- **Class** — exactly one per node, from a fixed eighteen: entities (`person`,
+  `creature`, `organization`, `place`, `object`, `document`), work (`event`,
+  `project`, `plan`, `issue`, `solution`), and what is held or known
+  (`decision`, `preference`, `constraint`, `finding`, `idea`, `trait`,
+  `method`). Closed on purpose — the canvas paints a colour per class, and a
   set that grows at runtime is a set where half the graph is the fallback grey.
+  Closed is not frozen: classes have been merged away and added since, each one
+  a migration that moves the memories rather than stranding them.
 - **Tags** — any number per node, created freely and indexed for filtering.
 
 The split is deliberate: a class is the shape, tags are the specifics. A
-girlfriend is a `person` tagged `girlfriend`; a pet is an `object` tagged `pet`.
+girlfriend is a `person` tagged `girlfriend`; a pet is a `creature` tagged
+`pet`.
 A word that is not a class is kept as a tag and the write still succeeds — the
 memory is never lost to a vocabulary argument, and the response says what it
 did.
