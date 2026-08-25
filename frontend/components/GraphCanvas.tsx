@@ -18,6 +18,7 @@ import {
   type Coords,
   type ForceGraphHandle,
   type GraphData,
+  graphFraming,
   type PositionedNode,
 } from "@/lib/force-graph";
 import {
@@ -59,6 +60,15 @@ import {
   nodeRadius,
   setSpriteTheme,
 } from "./node-sprite";
+
+/** Quiet time before the canvas is allowed to pull the graph back into view. */
+const IDLE_MS = 5000;
+
+/** How far off centre the graph may sit, as a fraction of its own radius. */
+const OFF_CENTRE = 0.25;
+
+/** Long enough to read as the view sliding back, not as a cut. */
+const RECENTRE_MS = 900;
 
 /**
  * The renderer's own generics model nodes as open records, which does not line
@@ -883,6 +893,74 @@ function GraphCanvasImpl({
     cameraDriven.current = true;
     framed.current = true;
   }, [handle, mode]);
+
+  /**
+   * Bring the graph back under the viewport once it has drifted off it. The
+   * staged fits above stop for good once the camera is yours, so nothing else
+   * recovers it. Frames as the initial fit does, after `IDLE_MS` of quiet.
+   */
+  const lastInput = useRef(0);
+  const settleUntil = useRef(0);
+
+  useEffect(() => {
+    const graph = handle;
+    if (!graph) return;
+
+    // Window-wide and capturing: a 2D pan and a 3D orbit surface through
+    // different paths, and a stray click elsewhere only delays a re-centre.
+    const touch = () => {
+      lastInput.current = Date.now();
+    };
+    window.addEventListener("pointerdown", touch, true);
+    window.addEventListener("wheel", touch, true);
+
+    const tick = () => {
+      // A focused memory is a deliberate framing; leave it until it is closed.
+      if (focusId) return;
+      if (Date.now() - lastInput.current < IDLE_MS) return;
+      // The tween outlasts the interval, and reading a camera mid-flight
+      // compounds the error.
+      if (Date.now() < settleUntil.current) return;
+
+      const framing = graphFraming(data.nodes as PositionedNode[]);
+      if (!framing) return;
+      const { cx, cy, cz, radius } = framing;
+      // Proportional, so it triggers on being off to the side rather than on
+      // the centroid shifting by a node's width.
+      const slack = radius * OFF_CENTRE;
+
+      if (mode === "3d") {
+        const target = graph.controls?.()?.target;
+        if (!target) return;
+        if (Math.hypot(target.x - cx, target.y - cy, target.z - cz) < slack) {
+          return;
+        }
+        // Half of the renderer's default 50 degree vertical field of view.
+        const distance = (radius / Math.tan((25 * Math.PI) / 180)) * 1.15;
+        settleUntil.current = Date.now() + RECENTRE_MS + 400;
+        suspendOrbit(RECENTRE_MS + 400);
+        graph.cameraPosition?.(
+          { x: cx, y: cy, z: cz + distance },
+          { x: cx, y: cy, z: cz },
+          RECENTRE_MS,
+        );
+        return;
+      }
+
+      const centre = graph.centerAt?.();
+      if (!centre) return;
+      if (Math.hypot(centre.x - cx, centre.y - cy) < slack) return;
+      settleUntil.current = Date.now() + RECENTRE_MS + 400;
+      graph.centerAt?.(cx, cy, RECENTRE_MS);
+    };
+
+    const timer = setInterval(tick, 1000);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener("pointerdown", touch, true);
+      window.removeEventListener("wheel", touch, true);
+    };
+  }, [handle, mode, focusId, data.nodes]);
 
   /**
    * Keep that memory current.

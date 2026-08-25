@@ -102,16 +102,17 @@ export function createSeparateForce({
         const sy = dy * push;
         const sz = dz * push;
 
-        // A memory placed by hand stays where it was put.
+        // A memory placed by hand stays put, and only one that already has
+        // depth is given velocity in it: `undefined + vz` is NaN.
         if (a.fx === undefined) {
           a.vx = (a.vx ?? 0) - sx;
           a.vy = (a.vy ?? 0) - sy;
-          if (spatial) a.vz = (a.vz ?? 0) - sz;
+          if (spatial && a.z !== undefined) a.vz = (a.vz ?? 0) - sz;
         }
         if (b.fx === undefined) {
           b.vx = (b.vx ?? 0) + sx;
           b.vy = (b.vy ?? 0) + sy;
-          if (spatial) b.vz = (b.vz ?? 0) + sz;
+          if (spatial && b.z !== undefined) b.vz = (b.vz ?? 0) + sz;
         }
       }
     }

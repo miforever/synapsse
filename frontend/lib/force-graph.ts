@@ -71,4 +71,48 @@ export type PositionedNode = GraphNode &
     fz?: number;
   };
 
+/**
+ * Centroid and reach, measured from the nodes rather than getGraphBbox, which
+ * over-reports enough to pull a 3D camera roughly three times too far out. The
+ * radius is the 95th percentile, so strays cannot drag the framing open.
+ */
+export function graphFraming(
+  nodes: PositionedNode[],
+): { cx: number; cy: number; cz: number; radius: number } | null {
+  let cx = 0;
+  let cy = 0;
+  let cz = 0;
+  let counted = 0;
+
+  // Finite rather than merely present: a camera is aimed at the result.
+  const placed = nodes.filter(
+    (node) =>
+      Number.isFinite(node.x) &&
+      Number.isFinite(node.y) &&
+      (node.z === undefined || Number.isFinite(node.z)),
+  );
+
+  for (const node of placed) {
+    cx += node.x ?? 0;
+    cy += node.y ?? 0;
+    cz += node.z ?? 0;
+    counted += 1;
+  }
+  if (counted === 0) return null;
+  cx /= counted;
+  cy /= counted;
+  cz /= counted;
+
+  const radii = placed
+    .map((node) =>
+      Math.hypot((node.x ?? 0) - cx, (node.y ?? 0) - cy, (node.z ?? 0) - cz),
+    )
+    .sort((a, b) => a - b);
+
+  const radius = radii[Math.floor(radii.length * 0.95)] ?? 0;
+  if (!(radius > 0)) return null;
+
+  return { cx, cy, cz, radius };
+}
+
 export const CANVAS_BACKGROUND = PALETTE.canvas;
