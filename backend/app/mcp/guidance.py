@@ -49,21 +49,22 @@ it later does not rewrite the history of the problem.
 
 ## Class and tags
 
-Every memory has one **class** from a fixed sixteen, and any number of **tags**
+Every memory has one **class** from a fixed eighteen, and any number of **tags**
 for the specifics.
 
 - `person` a human · `creature` a living thing that is not human
 - `organization` people acting as one body
 - `place` somewhere things are located
-- `object` an inanimate thing owned or handled · `device` a machine with state
-  that runs and breaks · `document` content you can point at, file or contract
-  or URL
+- `object` an inanimate thing owned or handled · `document` content you can
+  point at, file or contract or URL
 - `event` something that occurred, at a time
 - `project` sustained effort with a scope · `plan` an intention with an end
-  state · `issue` a problem in play
+  state · `issue` a problem in play · `solution` what actually resolved one
 - `decision` a choice and its reason · `preference` how someone wants things
   done · `constraint` a rule that binds whether or not they like it ·
   `finding` something learned, with evidence · `idea` a proposal not yet tested
+  · `trait` a durable characteristic of someone · `method` a repeatable way of
+  doing something
 
 A girlfriend is a `person` tagged `girlfriend`. A recurring argument is an
 `issue` tagged with who it involves. A word that is not a class is kept as a
@@ -74,7 +75,12 @@ Where the boundaries blur: an `idea` is untested, a `finding` is learned, a
 `decision` is chosen. A `preference` is what someone likes and a `constraint`
 is what they are bound by — do not file an obligation as a taste. A `place` is
 somewhere you locate other things, an `object` is something owned or handled:
-the garage is a place, the car in it is an object.
+the garage is a place, the car in it is an object. An `issue` is a problem
+still in play and a `solution` is what closed one, so write the fix as its own
+memory rather than as a tag on the problem. A `trait` is what someone is and
+does not close; a habit that frustrates them is a trait, not an `issue` waiting
+to be marked done. A `plan` finishes and a `method` recurs: a growth playbook
+or a grooming protocol is a method, however much it reads like a plan.
 
 ## Connect it to something
 

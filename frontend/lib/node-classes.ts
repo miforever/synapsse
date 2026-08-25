@@ -11,29 +11,36 @@
  * Lightness alternates between neighbours too, so adjacent classes differ on
  * two channels rather than one.
  *
- * Sixteen classes is past what hue alone can carry — measured, the closest
- * pair sits at 0.09 in OKLab for normal vision and 0.03 under deuteranopia.
+ * Eighteen classes is past what hue alone can carry, and was already past it
+ * at sixteen. Measured across every pair in OKLab, the closest sits at 0.088
+ * for normal vision — it was 0.092 with two classes fewer, so the taxonomy
+ * grew and the palette paid about four thousandths for it. Simulated
+ * deuteranopia (Viénot 1999) collapses neighbouring hues to nearly nothing at
+ * either count, which no re-spacing fixes.
+ *
  * Colour is therefore the fast channel, not the only one: FAMILY groups the
- * classes into seven shapes for anyone the hues fail.
+ * classes into eight shapes for anyone the hues fail.
  */
 
 export const CLASS_COLORS: Readonly<Record<string, string>> = {
-  person: "#FD968F",
-  creature: "#E97126",
-  organization: "#F9A216",
-  place: "#B69513",
-  object: "#B5C31E",
-  device: "#60AF3C",
-  document: "#23D891",
-  event: "#0CB09E",
-  project: "#1ACFDF",
-  plan: "#0DA7D6",
-  issue: "#7DBDFE",
-  decision: "#778EFD",
-  preference: "#BDA7FF",
-  constraint: "#C272DC",
-  finding: "#FD88D9",
-  idea: "#EA648F",
+  person: "#FF958E",
+  creature: "#EB6F30",
+  organization: "#FF9D23",
+  place: "#C09000",
+  object: "#C9BC00",
+  document: "#82A900",
+  event: "#6AD36E",
+  project: "#00B381",
+  plan: "#00D3C2",
+  issue: "#00ACBA",
+  solution: "#00CAFD",
+  decision: "#00A0F8",
+  preference: "#94B6FF",
+  constraint: "#8F85FC",
+  finding: "#CBA0FF",
+  idea: "#CB6FD2",
+  trait: "#FF89D0",
+  method: "#EA648B",
 };
 
 /**
@@ -44,30 +51,38 @@ export const CLASS_COLORS: Readonly<Record<string, string>> = {
  * a label. Each is the same hue taken down in lightness until it reads as ink.
  */
 export const CLASS_COLORS_LIGHT: Readonly<Record<string, string>> = {
-  person: "#AF3C3A",
-  creature: "#853801",
-  organization: "#915C08",
-  place: "#645000",
-  object: "#677008",
-  device: "#276200",
-  document: "#0A7D51",
-  event: "#0C6056",
-  project: "#117780",
-  plan: "#015B77",
-  issue: "#066BB8",
-  decision: "#3946A4",
-  preference: "#7152B5",
-  constraint: "#733087",
-  finding: "#9E3F84",
-  idea: "#90204B",
+  person: "#AF3C3B",
+  creature: "#893400",
+  organization: "#975800",
+  place: "#6A4D00",
+  object: "#736B00",
+  document: "#455C00",
+  event: "#1C7E28",
+  project: "#006245",
+  plan: "#007A6F",
+  issue: "#005E66",
+  solution: "#007493",
+  decision: "#00578B",
+  preference: "#3C63BF",
+  constraint: "#4D40A1",
+  finding: "#7D4DAE",
+  idea: "#792C80",
+  trait: "#A23D7D",
+  method: "#911F48",
 };
 
 /**
  * The second channel, for when colour is not enough.
  *
- * Seven families, each drawn as its own shape. Shape carries the family and
+ * Eight families, each drawn as its own shape. Shape carries the family and
  * hue carries the class within it, so the pair identifies a node even when the
  * hues collapse — which they do for roughly one man in twelve.
+ *
+ * `position` was one family of five and would now be seven, which defeats the
+ * point: the more classes share a shape, the more of the work falls back on
+ * the hues that were failing in the first place. It splits on what the memory
+ * is doing — `stance` is something held (chosen, wanted, imposed), `knowledge`
+ * is something carried (learned, proposed, true of someone, done repeatedly).
  */
 export type ClassFamily =
   | "being"
@@ -76,7 +91,8 @@ export type ClassFamily =
   | "thing"
   | "happening"
   | "work"
-  | "position";
+  | "stance"
+  | "knowledge";
 
 export const CLASS_FAMILY: Readonly<Record<string, ClassFamily>> = {
   person: "being",
@@ -84,20 +100,29 @@ export const CLASS_FAMILY: Readonly<Record<string, ClassFamily>> = {
   organization: "group",
   place: "place",
   object: "thing",
-  device: "thing",
   document: "thing",
   event: "happening",
   project: "work",
   plan: "work",
   issue: "work",
-  decision: "position",
-  preference: "position",
-  constraint: "position",
-  finding: "position",
-  idea: "position",
+  solution: "work",
+  decision: "stance",
+  preference: "stance",
+  constraint: "stance",
+  finding: "knowledge",
+  idea: "knowledge",
+  trait: "knowledge",
+  method: "knowledge",
 };
 
-/** How many sides the family's mark has; 0 is a circle. */
+/**
+ * How many sides the family's mark has; 0 is a circle.
+ *
+ * Eight is the ceiling this channel has: past six sides a polygon reads as a
+ * circle at the size a node draws, so `knowledge` taking nine is the last seat
+ * available and a ninth family would have to find a second axis — a hollow
+ * mark, say — rather than another side.
+ */
 export const FAMILY_SIDES: Readonly<Record<ClassFamily, number>> = {
   being: 0,
   group: 6,
@@ -105,7 +130,8 @@ export const FAMILY_SIDES: Readonly<Record<ClassFamily, number>> = {
   thing: 4,
   happening: 5,
   work: 8,
-  position: 7,
+  stance: 7,
+  knowledge: 9,
 };
 
 export const FALLBACK_COLOR = "#64748B";

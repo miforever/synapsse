@@ -222,6 +222,26 @@ REWRITES: tuple[str, ...] = (
     "UPDATE nodes SET type = 'finding' WHERE type = 'fact'",
     "UPDATE nodes SET type = 'document' WHERE type = 'resource'",
     "DELETE FROM node_types WHERE name IN ('fact', 'resource')",
+    # `device` folded into `object`, the distinction having proved unwritable.
+    #
+    # The word is kept as a tag on the way past, which the merge above did not
+    # do and should have: a live write that reaches for a class outside the set
+    # keeps it as a tag, and a migration that silently drops the same word is
+    # the same store telling two different stories about what it preserves.
+    #
+    # The tag row first, and only where there is something to tag: node_tags
+    # has a foreign key onto it, and a store that never held a device should
+    # not come out of the upgrade with an empty word in its vocabulary.
+    """
+    INSERT OR IGNORE INTO tags (name)
+    SELECT 'device' WHERE EXISTS (SELECT 1 FROM nodes WHERE type = 'device')
+    """,
+    """
+    INSERT OR IGNORE INTO node_tags (node_id, tag)
+    SELECT id, 'device' FROM nodes WHERE type = 'device'
+    """,
+    "UPDATE nodes SET type = 'object' WHERE type = 'device'",
+    "DELETE FROM node_types WHERE name = 'device'",
 )
 
 # A client that has not asked what changed in ninety days is reloading from
