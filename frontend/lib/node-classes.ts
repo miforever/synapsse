@@ -11,12 +11,14 @@
  * Lightness alternates between neighbours too, so adjacent classes differ on
  * two channels rather than one.
  *
- * Eighteen classes is past what hue alone can carry, and was already past it
- * at sixteen. Measured across every pair in OKLab, the closest sits at 0.088
- * for normal vision — it was 0.092 with two classes fewer, so the taxonomy
- * grew and the palette paid about four thousandths for it. Simulated
- * deuteranopia (Viénot 1999) collapses neighbouring hues to nearly nothing at
- * either count, which no re-spacing fixes.
+ * Twenty classes is past what hue alone can carry, and was already past it at
+ * sixteen. Measured across every pair in OKLab, the closest sits at 0.073 for
+ * normal vision, against 0.088 at eighteen and 0.092 at sixteen. The cost is
+ * front-loaded: the first class past eighteen took 0.011 and each one after it
+ * takes about a thousandth, so the count is worth settling in one go rather
+ * than one at a time. Simulated deuteranopia (Viénot 1999) collapses
+ * neighbouring hues to nearly nothing at any of these counts, which no
+ * re-spacing fixes.
  *
  * Colour is therefore the fast channel, not the only one: FAMILY groups the
  * classes into eight shapes for anyone the hues fail.
@@ -24,23 +26,25 @@
 
 export const CLASS_COLORS: Readonly<Record<string, string>> = {
   person: "#FF958E",
-  creature: "#EB6F30",
-  organization: "#FF9D23",
-  place: "#C09000",
-  object: "#C9BC00",
-  document: "#82A900",
-  event: "#6AD36E",
-  project: "#00B381",
-  plan: "#00D3C2",
-  issue: "#00ACBA",
-  solution: "#00CAFD",
-  decision: "#00A0F8",
-  preference: "#94B6FF",
-  constraint: "#8F85FC",
-  finding: "#CBA0FF",
-  idea: "#CB6FD2",
-  trait: "#FF89D0",
-  method: "#EA648B",
+  creature: "#EC6E35",
+  organization: "#FF9C3C",
+  place: "#C78C00",
+  object: "#D5B600",
+  document: "#97A200",
+  event: "#8CCE50",
+  project: "#29B45D",
+  plan: "#00D7A5",
+  issue: "#00AFA4",
+  solution: "#00CFDF",
+  decision: "#00A8D0",
+  preference: "#66C1FF",
+  constraint: "#5197FF",
+  interest: "#A4B1FF",
+  finding: "#A17FF6",
+  idea: "#DA98FF",
+  trait: "#D26CC9",
+  method: "#FF8BC8",
+  skill: "#EC6387",
 };
 
 /**
@@ -51,24 +55,26 @@ export const CLASS_COLORS: Readonly<Record<string, string>> = {
  * a label. Each is the same hue taken down in lightness until it reads as ink.
  */
 export const CLASS_COLORS_LIGHT: Readonly<Record<string, string>> = {
-  person: "#AF3C3B",
-  creature: "#893400",
-  organization: "#975800",
-  place: "#6A4D00",
-  object: "#736B00",
-  document: "#455C00",
-  event: "#1C7E28",
-  project: "#006245",
-  plan: "#007A6F",
-  issue: "#005E66",
-  solution: "#007493",
-  decision: "#00578B",
-  preference: "#3C63BF",
-  constraint: "#4D40A1",
-  finding: "#7D4DAE",
-  idea: "#792C80",
-  trait: "#A23D7D",
-  method: "#911F48",
+  person: "#B03B3A",
+  creature: "#8B3200",
+  organization: "#9A5500",
+  place: "#6E4B00",
+  object: "#7B6800",
+  document: "#525800",
+  event: "#467900",
+  project: "#00642C",
+  plan: "#007C5E",
+  issue: "#006059",
+  solution: "#007781",
+  decision: "#005C73",
+  preference: "#0070A7",
+  constraint: "#104EA4",
+  interest: "#545CBE",
+  finding: "#5A3A9C",
+  idea: "#8649A6",
+  trait: "#7E2979",
+  method: "#A43C77",
+  skill: "#921E45",
 };
 
 /**
@@ -109,10 +115,12 @@ export const CLASS_FAMILY: Readonly<Record<string, ClassFamily>> = {
   decision: "stance",
   preference: "stance",
   constraint: "stance",
+  interest: "stance",
   finding: "knowledge",
   idea: "knowledge",
   trait: "knowledge",
   method: "knowledge",
+  skill: "knowledge",
 };
 
 /**

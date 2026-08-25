@@ -36,6 +36,11 @@ from app.core.slug import slugify
 # never closes. `method` is the third: a plan ends and a method recurs, so a
 # grooming protocol and a growth playbook were sitting in `plan` waiting for a
 # completion that was never coming.
+#
+# `interest` and `skill` came from the same place. A hobby is not how someone
+# wants work done, and it was landing in `preference` beside instructions on
+# tone; what someone can do is not something they learned once, and it was
+# landing in `finding` beside evidence.
 NODE_CLASSES: tuple[str, ...] = (
     # Beings
     "person",
@@ -63,10 +68,12 @@ NODE_CLASSES: tuple[str, ...] = (
     "decision",
     "preference",
     "constraint",
+    "interest",
     "finding",
     "idea",
     "trait",
     "method",
+    "skill",
 )
 
 # Where an unrecognised class lands.

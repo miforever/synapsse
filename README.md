@@ -285,11 +285,11 @@ normalise before it could answer.
 
 Nodes are organized two ways:
 
-- **Class** — exactly one per node, from a fixed eighteen: entities (`person`,
+- **Class** — exactly one per node, from a fixed twenty: entities (`person`,
   `creature`, `organization`, `place`, `object`, `document`), work (`event`,
   `project`, `plan`, `issue`, `solution`), and what is held or known
-  (`decision`, `preference`, `constraint`, `finding`, `idea`, `trait`,
-  `method`). Closed on purpose — the canvas paints a colour per class, and a
+  (`decision`, `preference`, `constraint`, `interest`, `finding`, `idea`,
+  `trait`, `method`, `skill`). Closed on purpose — the canvas paints a colour per class, and a
   set that grows at runtime is a set where half the graph is the fallback grey.
   Closed is not frozen: classes have been merged away and added since, each one
   a migration that moves the memories rather than stranding them.

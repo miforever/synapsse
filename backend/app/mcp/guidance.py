@@ -49,7 +49,7 @@ it later does not rewrite the history of the problem.
 
 ## Class and tags
 
-Every memory has one **class** from a fixed eighteen, and any number of **tags**
+Every memory has one **class** from a fixed twenty, and any number of **tags**
 for the specifics.
 
 - `person` a human · `creature` a living thing that is not human
@@ -62,9 +62,10 @@ for the specifics.
   state · `issue` a problem in play · `solution` what actually resolved one
 - `decision` a choice and its reason · `preference` how someone wants things
   done · `constraint` a rule that binds whether or not they like it ·
-  `finding` something learned, with evidence · `idea` a proposal not yet tested
-  · `trait` a durable characteristic of someone · `method` a repeatable way of
-  doing something
+  `interest` a subject or pursuit someone is drawn to · `finding` something
+  learned, with evidence · `idea` a proposal not yet tested · `trait` a durable
+  characteristic of someone · `method` a repeatable way of doing something ·
+  `skill` something someone can do, at some level
 
 A girlfriend is a `person` tagged `girlfriend`. A recurring argument is an
 `issue` tagged with who it involves. A word that is not a class is kept as a
@@ -80,7 +81,11 @@ still in play and a `solution` is what closed one, so write the fix as its own
 memory rather than as a tag on the problem. A `trait` is what someone is and
 does not close; a habit that frustrates them is a trait, not an `issue` waiting
 to be marked done. A `plan` finishes and a `method` recurs: a growth playbook
-or a grooming protocol is a method, however much it reads like a plan.
+or a grooming protocol is a method, however much it reads like a plan. An
+`interest` is a subject someone is drawn to, not a `preference` about how work
+is done — a football team belongs in one and a house style in the other. A
+`skill` is what they can do; filing it as a `finding` says only that somebody
+learned it.
 
 ## Connect it to something
 
