@@ -171,3 +171,12 @@ export function labelForClass(name: string): string {
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
 }
+
+/** The classes in hue order, which is the order any class-grouped list uses. */
+export const CLASS_ORDER: readonly string[] = Object.keys(CLASS_COLORS);
+
+/** Sort key for a class; unrecognised ones fall to the end. */
+export function orderForClass(name: string): number {
+  const index = CLASS_ORDER.indexOf(name);
+  return index === -1 ? CLASS_ORDER.length : index;
+}

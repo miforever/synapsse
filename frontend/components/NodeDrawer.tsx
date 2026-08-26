@@ -6,7 +6,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { attachFile, detachFile, fetchNode, fileUrl } from "@/lib/api";
 import { isImage } from "@/lib/files";
 import { useGraphStore } from "./GraphProvider";
-import { colorForClass, labelForClass } from "@/lib/node-classes";
+import {
+  colorForClass,
+  labelForClass,
+  orderForClass,
+} from "@/lib/node-classes";
 import type {
   FileRef,
   GraphEdge,
@@ -165,6 +169,29 @@ export function NodeDrawer({
           endpointId(edge.target) === node.id,
       )
     : [];
+
+  // The neighbours in bands, one per class, in the canvas's class order
+  // rather than by size, so the same memory always lists them the same way.
+  const neighbours = related.map((edge) => {
+    const outgoing = endpointId(edge.source) === openId;
+    const otherId = outgoing
+      ? endpointId(edge.target)
+      : endpointId(edge.source);
+    return { edge, outgoing, otherId, other: nodesById.get(otherId) };
+  });
+
+  const byClass = new Map<string, typeof neighbours>();
+  for (const neighbour of neighbours) {
+    // A memory outside the loaded graph has no class to band it by.
+    const type = neighbour.other?.type ?? "fact";
+    const band = byClass.get(type);
+    if (band) band.push(neighbour);
+    else byClass.set(type, [neighbour]);
+  }
+
+  const bands = [...byClass.entries()].sort(
+    ([a], [b]) => orderForClass(a) - orderForClass(b) || a.localeCompare(b),
+  );
 
   const files = detail?.files ?? [];
   const sources = detail?.sources ?? [];
@@ -361,50 +388,58 @@ export function NodeDrawer({
 
               <AnimatePresence initial={false}>
                 {showConnections && (
-                  <motion.ul
+                  <motion.div
                     initial={{ height: 0, opacity: 0 }}
                     animate={{ height: "auto", opacity: 1 }}
                     exit={{ height: 0, opacity: 0 }}
                     transition={{ duration: 0.18 }}
                     // Capped so a heavily linked memory cannot swallow the
                     // whole drawer; it scrolls within its own space instead.
-                    className="max-h-52 space-y-0.5 overflow-y-auto px-3 pb-3"
+                    className="max-h-52 overflow-y-auto px-3 pb-3"
                   >
-                    {related.map((edge) => {
-                      const outgoing = endpointId(edge.source) === node.id;
-                      const otherId = outgoing
-                        ? endpointId(edge.target)
-                        : endpointId(edge.source);
-                      const other = nodesById.get(otherId);
-
-                      return (
-                        <li key={edge.id}>
-                          <button
-                            type="button"
-                            onClick={() => onNavigate(otherId)}
-                            className="flex w-full items-center gap-2 rounded-[14px] px-2 py-1.5 text-left transition hover:bg-elevated/10"
+                    {bands.map(([type, band]) => (
+                      <section key={type}>
+                        <h3 className="sticky top-0 z-10 flex items-center gap-2 bg-canvas/85 px-2 py-1.5 backdrop-blur-sm">
+                          <span
+                            className="h-1.5 w-1.5 shrink-0 rounded-full"
+                            style={{
+                              backgroundColor: colorForClass(type, theme),
+                            }}
+                          />
+                          <span
+                            className="font-mono text-[10px] uppercase tracking-[0.16em]"
+                            style={{ color: colorForClass(type, theme) }}
                           >
-                            <span
-                              className="h-1.5 w-1.5 shrink-0 rounded-full"
-                              style={{
-                                backgroundColor: colorForClass(
-                                  other?.type ?? "fact",
-                                ),
-                              }}
-                            />
-                            <span className="min-w-0 flex-1">
-                              <span className="block truncate text-xs text-strong">
-                                {other?.title ?? "Unknown memory"}
-                              </span>
-                              <span className="block font-mono text-[10px] text-faint">
-                                {outgoing ? "→" : "←"} {edge.relation_type}
-                              </span>
-                            </span>
-                          </button>
-                        </li>
-                      );
-                    })}
-                  </motion.ul>
+                            {labelForClass(type)}
+                          </span>
+                          <span className="font-mono text-[10px] text-faint">
+                            {band.length}
+                          </span>
+                        </h3>
+
+                        <ul className="space-y-0.5 pb-1">
+                          {band.map(({ edge, outgoing, otherId, other }) => (
+                            <li key={edge.id}>
+                              <button
+                                type="button"
+                                onClick={() => onNavigate(otherId)}
+                                className="flex w-full items-center gap-2 rounded-[14px] px-2 py-1.5 pl-5 text-left transition hover:bg-elevated/10"
+                              >
+                                <span className="min-w-0 flex-1">
+                                  <span className="block truncate text-xs text-strong">
+                                    {other?.title ?? "Unknown memory"}
+                                  </span>
+                                  <span className="block font-mono text-[10px] text-faint">
+                                    {outgoing ? "→" : "←"} {edge.relation_type}
+                                  </span>
+                                </span>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      </section>
+                    ))}
+                  </motion.div>
                 )}
               </AnimatePresence>
             </section>
