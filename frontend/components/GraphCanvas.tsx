@@ -61,8 +61,14 @@ import {
   setSpriteTheme,
 } from "./node-sprite";
 
+/** When the opening fits run, in ms from the canvas appearing. */
+const FIT_DELAYS = [1400, 4000, 8000];
+
 /** Quiet time before the canvas is allowed to pull the graph back into view. */
 const IDLE_MS = 5000;
+
+/** How long the opening fits are left alone for, from the canvas appearing. */
+const OPENING_MS = FIT_DELAYS[FIT_DELAYS.length - 1] + 1000;
 
 /** How far off centre the graph may sit, as a fraction of its own radius. */
 const OFF_CENTRE = 0.25;
@@ -849,7 +855,7 @@ function GraphCanvasImpl({
       }
     };
 
-    const timers = [1400, 4000, 8000].map((delay) => setTimeout(fit, delay));
+    const timers = FIT_DELAYS.map((delay) => setTimeout(fit, delay));
     return () => timers.forEach(clearTimeout);
   }, [data.nodes.length, mode, graphRef]);
 
@@ -901,6 +907,15 @@ function GraphCanvasImpl({
    */
   const lastInput = useRef(0);
   const settleUntil = useRef(0);
+  /** When this renderer appeared, so the opening fits are given their run. */
+  const canvasSince = useRef(0);
+
+  // Both clocks start with the renderer; unseeded they read as a lifetime of
+  // quiet, and the first tick would recover a graph nobody had moved.
+  useEffect(() => {
+    canvasSince.current = Date.now();
+    lastInput.current = Date.now();
+  }, [handle, mode]);
 
   useEffect(() => {
     const graph = handle;
@@ -917,6 +932,8 @@ function GraphCanvasImpl({
     const tick = () => {
       // A focused memory is a deliberate framing; leave it until it is closed.
       if (focusId) return;
+      // The opening fits own the camera until they are done.
+      if (Date.now() - canvasSince.current < OPENING_MS) return;
       if (Date.now() - lastInput.current < IDLE_MS) return;
       // The tween outlasts the interval, and reading a camera mid-flight
       // compounds the error.
@@ -937,10 +954,32 @@ function GraphCanvasImpl({
         }
         // Half of the renderer's default 50 degree vertical field of view.
         const distance = (radius / Math.tan((25 * Math.PI) / 180)) * 1.15;
+
+        // Along the direction the view is already looking from, so a recovery
+        // is a move and not also a rotation.
+        const eye = graph.camera?.()?.position;
+        let dx = eye ? eye.x - target.x : 0;
+        let dy = eye ? eye.y - target.y : 0;
+        let dz = eye ? eye.z - target.z : 0;
+        const reach = Math.hypot(dx, dy, dz);
+        if (!Number.isFinite(reach) || reach < 1e-6) {
+          dx = 0;
+          dy = 0;
+          dz = 1;
+        } else {
+          dx /= reach;
+          dy /= reach;
+          dz /= reach;
+        }
+
         settleUntil.current = Date.now() + RECENTRE_MS + 400;
         suspendOrbit(RECENTRE_MS + 400);
         graph.cameraPosition?.(
-          { x: cx, y: cy, z: cz + distance },
+          {
+            x: cx + dx * distance,
+            y: cy + dy * distance,
+            z: cz + dz * distance,
+          },
           { x: cx, y: cy, z: cz },
           RECENTRE_MS,
         );
