@@ -40,8 +40,11 @@ async def update_settings(
     scope: str = DEFAULT_SCOPE,
 ) -> Settings:
     current = await get_settings(conn, scope)
-    merged = current.model_copy(
-        update=patch.model_dump(exclude_none=True, exclude_unset=True)
+    # Validated rather than copied in: model_copy assigns the patch's plain
+    # dicts straight onto the model, and a Settings holding one serialises as
+    # an empty object.
+    merged = Settings.model_validate(
+        current.model_dump() | patch.model_dump(exclude_none=True, exclude_unset=True)
     )
     await conn.execute(_UPSERT, (scope, merged.model_dump_json(), utcnow_iso()))
     await conn.commit()
