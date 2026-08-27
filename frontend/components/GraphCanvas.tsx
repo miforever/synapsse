@@ -18,6 +18,7 @@ import {
   type Coords,
   type ForceGraphHandle,
   type GraphData,
+  graphFraming,
   type PositionedNode,
 } from "@/lib/force-graph";
 import {
@@ -59,6 +60,21 @@ import {
   nodeRadius,
   setSpriteTheme,
 } from "./node-sprite";
+
+/** When the opening fits run, in ms from the canvas appearing. */
+const FIT_DELAYS = [1400, 4000, 8000];
+
+/** Quiet time before the canvas is allowed to pull the graph back into view. */
+const IDLE_MS = 5000;
+
+/** How long the opening fits are left alone for, from the canvas appearing. */
+const OPENING_MS = FIT_DELAYS[FIT_DELAYS.length - 1] + 1000;
+
+/** How far off centre the graph may sit, as a fraction of its own radius. */
+const OFF_CENTRE = 0.25;
+
+/** Long enough to read as the view sliding back, not as a cut. */
+const RECENTRE_MS = 900;
 
 /**
  * The renderer's own generics model nodes as open records, which does not line
@@ -839,7 +855,7 @@ function GraphCanvasImpl({
       }
     };
 
-    const timers = [1400, 4000, 8000].map((delay) => setTimeout(fit, delay));
+    const timers = FIT_DELAYS.map((delay) => setTimeout(fit, delay));
     return () => timers.forEach(clearTimeout);
   }, [data.nodes.length, mode, graphRef]);
 
@@ -883,6 +899,107 @@ function GraphCanvasImpl({
     cameraDriven.current = true;
     framed.current = true;
   }, [handle, mode]);
+
+  /**
+   * Bring the graph back under the viewport once it has drifted off it. The
+   * staged fits above stop for good once the camera is yours, so nothing else
+   * recovers it. Frames as the initial fit does, after `IDLE_MS` of quiet.
+   */
+  const lastInput = useRef(0);
+  const settleUntil = useRef(0);
+  /** When this renderer appeared, so the opening fits are given their run. */
+  const canvasSince = useRef(0);
+
+  // Both clocks start with the renderer; unseeded they read as a lifetime of
+  // quiet, and the first tick would recover a graph nobody had moved.
+  useEffect(() => {
+    canvasSince.current = Date.now();
+    lastInput.current = Date.now();
+  }, [handle, mode]);
+
+  useEffect(() => {
+    const graph = handle;
+    if (!graph) return;
+
+    // Window-wide and capturing: a 2D pan and a 3D orbit surface through
+    // different paths, and a stray click elsewhere only delays a re-centre.
+    const touch = () => {
+      lastInput.current = Date.now();
+    };
+    window.addEventListener("pointerdown", touch, true);
+    window.addEventListener("wheel", touch, true);
+
+    const tick = () => {
+      // A focused memory is a deliberate framing; leave it until it is closed.
+      if (focusId) return;
+      // The opening fits own the camera until they are done.
+      if (Date.now() - canvasSince.current < OPENING_MS) return;
+      if (Date.now() - lastInput.current < IDLE_MS) return;
+      // The tween outlasts the interval, and reading a camera mid-flight
+      // compounds the error.
+      if (Date.now() < settleUntil.current) return;
+
+      const framing = graphFraming(data.nodes as PositionedNode[]);
+      if (!framing) return;
+      const { cx, cy, cz, radius } = framing;
+      // Proportional, so it triggers on being off to the side rather than on
+      // the centroid shifting by a node's width.
+      const slack = radius * OFF_CENTRE;
+
+      if (mode === "3d") {
+        const target = graph.controls?.()?.target;
+        if (!target) return;
+        if (Math.hypot(target.x - cx, target.y - cy, target.z - cz) < slack) {
+          return;
+        }
+        // Half of the renderer's default 50 degree vertical field of view.
+        const distance = (radius / Math.tan((25 * Math.PI) / 180)) * 1.15;
+
+        // Along the direction the view is already looking from, so a recovery
+        // is a move and not also a rotation.
+        const eye = graph.camera?.()?.position;
+        let dx = eye ? eye.x - target.x : 0;
+        let dy = eye ? eye.y - target.y : 0;
+        let dz = eye ? eye.z - target.z : 0;
+        const reach = Math.hypot(dx, dy, dz);
+        if (!Number.isFinite(reach) || reach < 1e-6) {
+          dx = 0;
+          dy = 0;
+          dz = 1;
+        } else {
+          dx /= reach;
+          dy /= reach;
+          dz /= reach;
+        }
+
+        settleUntil.current = Date.now() + RECENTRE_MS + 400;
+        suspendOrbit(RECENTRE_MS + 400);
+        graph.cameraPosition?.(
+          {
+            x: cx + dx * distance,
+            y: cy + dy * distance,
+            z: cz + dz * distance,
+          },
+          { x: cx, y: cy, z: cz },
+          RECENTRE_MS,
+        );
+        return;
+      }
+
+      const centre = graph.centerAt?.();
+      if (!centre) return;
+      if (Math.hypot(centre.x - cx, centre.y - cy) < slack) return;
+      settleUntil.current = Date.now() + RECENTRE_MS + 400;
+      graph.centerAt?.(cx, cy, RECENTRE_MS);
+    };
+
+    const timer = setInterval(tick, 1000);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener("pointerdown", touch, true);
+      window.removeEventListener("wheel", touch, true);
+    };
+  }, [handle, mode, focusId, data.nodes]);
 
   /**
    * Keep that memory current.

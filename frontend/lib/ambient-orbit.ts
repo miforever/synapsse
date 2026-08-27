@@ -70,6 +70,17 @@ export function polarRate(seconds: number): number {
 }
 
 /**
+ * Where one frame of elevation change may land. Outside the band the camera is
+ * where the user orbited it, so only motion toward the band is allowed: their
+ * viewpoint eases back into range rather than being pulled there in a frame.
+ */
+function settle(current: number, next: number): number {
+  if (current < MIN_POLAR) return clamp(next, current, MIN_POLAR);
+  if (current > MAX_POLAR) return clamp(next, MAX_POLAR, current);
+  return clamp(next, MIN_POLAR, MAX_POLAR);
+}
+
+/**
  * Rotate `position` about `target` by one frame's worth of motion.
  *
  * Exported separately from the scene plumbing so the motion itself can be
@@ -91,11 +102,8 @@ export function applyOrbit(
   if (radius < 1e-6) return;
 
   const azimuth = Math.atan2(ox, oz) + azimuthRate(seconds) * delta;
-  const polar = clamp(
-    Math.acos(clamp(oy / radius, -1, 1)) + polarRate(seconds) * delta,
-    MIN_POLAR,
-    MAX_POLAR,
-  );
+  const current = Math.acos(clamp(oy / radius, -1, 1));
+  const polar = settle(current, current + polarRate(seconds) * delta);
 
   const sinPolar = Math.sin(polar);
   position.x = target.x + radius * sinPolar * Math.sin(azimuth);

@@ -86,7 +86,7 @@ class MediaSettings(BaseModel):
     video: bool = False
     # When false, only same-origin and data URLs load; remote hosts are shown
     # as plain links so opening a memory never phones out.
-    remote_sources: bool = False
+    remote_content: bool = False
 
 
 class Settings(BaseModel):

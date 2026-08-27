@@ -11,7 +11,11 @@ import { StatusOverlay } from "@/components/StatusOverlay";
 import { useElementSize } from "@/hooks/useElementSize";
 import { useSettings } from "@/hooks/useSettings";
 import { suspendOrbit } from "@/lib/ambient-orbit";
-import type { ForceGraphHandle } from "@/lib/force-graph";
+import {
+  type ForceGraphHandle,
+  graphFraming,
+  type PositionedNode,
+} from "@/lib/force-graph";
 import type { GraphNode } from "@/lib/types";
 import { endpointId } from "@/lib/types";
 
@@ -81,6 +85,9 @@ export function CanvasView({ mode }: { mode: CanvasMode }) {
    * Measured from the nodes rather than through getGraphBbox, which
    * over-reports badly enough to pull a 3D camera roughly three times too far
    * out - the same reason the initial framing measures them too.
+   *
+   * Framed on the centroid, not the origin: dragging a memory moves the
+   * graph's centre of mass out from under 0,0,0.
    */
   useEffect(() => {
     canvasFit.current = () => {
@@ -92,17 +99,18 @@ export function CanvasView({ mode }: { mode: CanvasMode }) {
         return;
       }
 
-      const nodes = data.nodes as (GraphNode & { x?: number; y?: number })[];
-      let radius = 0;
-      for (const node of nodes) {
-        radius = Math.max(radius, Math.hypot(node.x ?? 0, node.y ?? 0));
-      }
-      if (radius <= 0) return;
+      const framing = graphFraming(data.nodes as PositionedNode[]);
+      if (!framing) return;
+      const { cx, cy, cz, radius } = framing;
 
       // Half of the renderer's default 50 degree vertical field of view.
       const distance = (radius / Math.tan((25 * Math.PI) / 180)) * 1.15;
       suspendOrbit(1200);
-      graph.cameraPosition?.({ x: 0, y: 0, z: distance }, { x: 0, y: 0, z: 0 }, 800);
+      graph.cameraPosition?.(
+        { x: cx, y: cy, z: cz + distance },
+        { x: cx, y: cy, z: cz },
+        800,
+      );
     };
 
     return () => {

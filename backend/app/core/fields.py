@@ -25,6 +25,22 @@ from app.core.slug import slugify
 #
 # `person` and `creature` set the granularity. Anything broader than those two
 # is a family, not a class, and belongs split.
+#
+# Three classes were added once the store had enough memories to show where
+# they were being forced. Two of them the instructions were already asking for
+# by name: guidance tells agents to record a problem "and again when something
+# actually fixes it", with nowhere for the fix to land, and it points at the
+# `trait` that explains both a disagreement and a delay without offering one.
+# Agents did what they could — a resolved problem became an `issue` wearing a
+# `resolved` tag, a trait became a `finding` or, worse, an `issue`, which then
+# never closes. `method` is the third: a plan ends and a method recurs, so a
+# grooming protocol and a growth playbook were sitting in `plan` waiting for a
+# completion that was never coming.
+#
+# `interest` and `skill` came from the same place. A hobby is not how someone
+# wants work done, and it was landing in `preference` beside instructions on
+# tone; what someone can do is not something they learned once, and it was
+# landing in `finding` beside evidence.
 NODE_CLASSES: tuple[str, ...] = (
     # Beings
     "person",
@@ -34,8 +50,12 @@ NODE_CLASSES: tuple[str, ...] = (
     # Places
     "place",
     # Things
+    #
+    # `device` was here and is gone. "A machine with state that runs and
+    # breaks" is not a line an agent can draw while it is writing: the one
+    # unambiguous device in the store was filed as an `object` anyway, and
+    # nobody searches on the distinction.
     "object",
-    "device",
     "document",
     # Happenings
     "event",
@@ -43,12 +63,17 @@ NODE_CLASSES: tuple[str, ...] = (
     "project",
     "plan",
     "issue",
+    "solution",
     # Positions held
     "decision",
     "preference",
     "constraint",
+    "interest",
     "finding",
     "idea",
+    "trait",
+    "method",
+    "skill",
 )
 
 # Where an unrecognised class lands.

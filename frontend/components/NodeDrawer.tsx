@@ -1,12 +1,17 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
+import type React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { attachFile, detachFile, fetchNode, fileUrl } from "@/lib/api";
 import { isImage } from "@/lib/files";
 import { useGraphStore } from "./GraphProvider";
-import { colorForClass, labelForClass } from "@/lib/node-classes";
+import {
+  colorForClass,
+  labelForClass,
+  orderForClass,
+} from "@/lib/node-classes";
 import type {
   FileRef,
   GraphEdge,
@@ -21,6 +26,18 @@ import { MemoryContent } from "./MemoryContent";
 
 /** Narrower than the drawer and it is an icon, not a cover. */
 const MIN_COVER_PX = 240;
+
+/** Height of the open connection list before anyone drags it. */
+const DEFAULT_LIST_PX = 208;
+
+/** Shorter than this and the list is not worth having open. */
+const MIN_LIST_PX = 96;
+
+/** Room left for the memory above it, however far the list is dragged up. */
+const KEEP_ABOVE_PX = 180;
+
+/** A keyboard's worth of drag. */
+const RESIZE_STEP_PX = 32;
 
 interface Props {
   node: GraphNode | null;
@@ -43,8 +60,10 @@ export function NodeDrawer({
   const { theme } = useGraphStore();
   const [detail, setDetail] = useState<NodeDetail | null>(null);
   // Sticky across nodes on purpose: someone traversing the graph wants the
-  // connection list to stay however they left it.
+  // connection list to stay however they left it — open, and this tall.
   const [showConnections, setShowConnections] = useState(true);
+  const [listHeight, setListHeight] = useState(DEFAULT_LIST_PX);
+  const [resizing, setResizing] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [dropping, setDropping] = useState(false);
@@ -52,6 +71,44 @@ export function NodeDrawer({
   const [coverTooSmall, setCoverTooSmall] = useState(false);
   /** Which memory is currently on screen, as opposed to being re-read. */
   const shownId = useRef<string | null>(null);
+  /** The drawer itself, which is what the list's height is measured against. */
+  const panel = useRef<HTMLElement>(null);
+  const grabbedAt = useRef({ y: 0, height: 0 });
+
+  // Never past the drawer it lives in, and never so short that opening it
+  // showed nothing.
+  const clampHeight = useCallback((px: number) => {
+    const room = (panel.current?.clientHeight ?? window.innerHeight) - KEEP_ABOVE_PX;
+    return Math.min(Math.max(px, MIN_LIST_PX), Math.max(room, MIN_LIST_PX));
+  }, []);
+
+  const startResize = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      event.currentTarget.setPointerCapture(event.pointerId);
+      grabbedAt.current = { y: event.clientY, height: listHeight };
+      setResizing(true);
+    },
+    [listHeight],
+  );
+
+  const dragResize = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (!resizing) return;
+      const { y, height } = grabbedAt.current;
+      setListHeight(clampHeight(height + (y - event.clientY)));
+    },
+    [resizing, clampHeight],
+  );
+
+  const endResize = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (!resizing) return;
+      event.currentTarget.releasePointerCapture(event.pointerId);
+      setResizing(false);
+    },
+    [resizing],
+  );
 
   /**
    * Attach whatever was dropped.
@@ -166,6 +223,29 @@ export function NodeDrawer({
       )
     : [];
 
+  // The neighbours in bands, one per class, in the canvas's class order
+  // rather than by size, so the same memory always lists them the same way.
+  const neighbours = related.map((edge) => {
+    const outgoing = endpointId(edge.source) === openId;
+    const otherId = outgoing
+      ? endpointId(edge.target)
+      : endpointId(edge.source);
+    return { edge, outgoing, otherId, other: nodesById.get(otherId) };
+  });
+
+  const byClass = new Map<string, typeof neighbours>();
+  for (const neighbour of neighbours) {
+    // A memory outside the loaded graph has no class to band it by.
+    const type = neighbour.other?.type ?? "fact";
+    const band = byClass.get(type);
+    if (band) band.push(neighbour);
+    else byClass.set(type, [neighbour]);
+  }
+
+  const bands = [...byClass.entries()].sort(
+    ([a], [b]) => orderForClass(a) - orderForClass(b) || a.localeCompare(b),
+  );
+
   const files = detail?.files ?? [];
   const sources = detail?.sources ?? [];
 
@@ -187,6 +267,7 @@ export function NodeDrawer({
     <AnimatePresence>
       {node && (
         <motion.aside
+          ref={panel}
           initial={{ x: "100%" }}
           animate={{ x: 0 }}
           exit={{ x: "100%" }}
@@ -337,7 +418,34 @@ export function NodeDrawer({
               whatever the memory's length, and collapses when the reader
               wants the room back. */}
           {related.length > 0 && (
-            <section className="shrink-0 border-t border-line/[.12] bg-elevated/[.05]">
+            <section className="relative shrink-0 border-t border-line/[.12] bg-elevated/[.05]">
+              {showConnections && (
+                <div
+                  role="separator"
+                  aria-orientation="horizontal"
+                  aria-label="Resize connections"
+                  tabIndex={0}
+                  onPointerDown={startResize}
+                  onPointerMove={dragResize}
+                  onPointerUp={endResize}
+                  onPointerCancel={endResize}
+                  onKeyDown={(event) => {
+                    if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+                    event.preventDefault();
+                    const step =
+                      event.key === "ArrowUp" ? RESIZE_STEP_PX : -RESIZE_STEP_PX;
+                    setListHeight((height) => clampHeight(height + step));
+                  }}
+                  className="group absolute inset-x-0 -top-1.5 z-20 flex h-3 cursor-ns-resize items-center justify-center"
+                >
+                  <span
+                    className={`h-0.5 w-10 rounded-full transition group-hover:bg-cyan/60 group-focus-visible:bg-cyan/60 ${
+                      resizing ? "bg-cyan/70" : "bg-line/25"
+                    }`}
+                  />
+                </div>
+              )}
+
               <button
                 type="button"
                 onClick={() => setShowConnections((open) => !open)}
@@ -361,50 +469,59 @@ export function NodeDrawer({
 
               <AnimatePresence initial={false}>
                 {showConnections && (
-                  <motion.ul
+                  <motion.div
                     initial={{ height: 0, opacity: 0 }}
                     animate={{ height: "auto", opacity: 1 }}
                     exit={{ height: 0, opacity: 0 }}
                     transition={{ duration: 0.18 }}
-                    // Capped so a heavily linked memory cannot swallow the
-                    // whole drawer; it scrolls within its own space instead.
-                    className="max-h-52 space-y-0.5 overflow-y-auto px-3 pb-3"
+                    // A ceiling rather than a height: a short list still takes
+                    // only the room it needs.
+                    style={{ maxHeight: listHeight }}
+                    className="overflow-y-auto px-3 pb-3"
                   >
-                    {related.map((edge) => {
-                      const outgoing = endpointId(edge.source) === node.id;
-                      const otherId = outgoing
-                        ? endpointId(edge.target)
-                        : endpointId(edge.source);
-                      const other = nodesById.get(otherId);
-
-                      return (
-                        <li key={edge.id}>
-                          <button
-                            type="button"
-                            onClick={() => onNavigate(otherId)}
-                            className="flex w-full items-center gap-2 rounded-[14px] px-2 py-1.5 text-left transition hover:bg-elevated/10"
+                    {bands.map(([type, band]) => (
+                      <section key={type}>
+                        <h3 className="sticky top-0 z-10 flex items-center gap-2 bg-canvas/85 px-2 py-1.5 backdrop-blur-sm">
+                          <span
+                            className="h-1.5 w-1.5 shrink-0 rounded-full"
+                            style={{
+                              backgroundColor: colorForClass(type, theme),
+                            }}
+                          />
+                          <span
+                            className="font-mono text-[10px] uppercase tracking-[0.16em]"
+                            style={{ color: colorForClass(type, theme) }}
                           >
-                            <span
-                              className="h-1.5 w-1.5 shrink-0 rounded-full"
-                              style={{
-                                backgroundColor: colorForClass(
-                                  other?.type ?? "fact",
-                                ),
-                              }}
-                            />
-                            <span className="min-w-0 flex-1">
-                              <span className="block truncate text-xs text-strong">
-                                {other?.title ?? "Unknown memory"}
-                              </span>
-                              <span className="block font-mono text-[10px] text-faint">
-                                {outgoing ? "→" : "←"} {edge.relation_type}
-                              </span>
-                            </span>
-                          </button>
-                        </li>
-                      );
-                    })}
-                  </motion.ul>
+                            {labelForClass(type)}
+                          </span>
+                          <span className="font-mono text-[10px] text-faint">
+                            {band.length}
+                          </span>
+                        </h3>
+
+                        <ul className="space-y-0.5 pb-1">
+                          {band.map(({ edge, outgoing, otherId, other }) => (
+                            <li key={edge.id}>
+                              <button
+                                type="button"
+                                onClick={() => onNavigate(otherId)}
+                                className="flex w-full items-center gap-2 rounded-[14px] px-2 py-1.5 pl-5 text-left transition hover:bg-elevated/10"
+                              >
+                                <span className="min-w-0 flex-1">
+                                  <span className="block truncate text-xs text-strong">
+                                    {other?.title ?? "Unknown memory"}
+                                  </span>
+                                  <span className="block font-mono text-[10px] text-faint">
+                                    {outgoing ? "→" : "←"} {edge.relation_type}
+                                  </span>
+                                </span>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      </section>
+                    ))}
+                  </motion.div>
                 )}
               </AnimatePresence>
             </section>

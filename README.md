@@ -231,6 +231,47 @@ The block is labelled as background rather than instruction, deliberately: the
 summaries were written by an earlier agent session, and a note must never be
 able to issue orders to a later one just by phrasing itself as a command.
 
+### Capture without being asked
+
+The write side fails the same way, in the other direction. An agent mid-task is
+optimising for the task, and stopping to record what it just learned is the
+thing it drops. `hooks/synapsse_capture.py` runs when a turn ends, and if your
+last message carried the phrasing of a standing instruction — *from now on*,
+*never use*, *i prefer*, *remember this* — it declines to let the turn end and
+hands the agent the job of recording it.
+
+```json
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /absolute/path/to/synapsse/hooks/synapsse_capture.py"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+It fires on standing rules and not on in-task corrections. "No, wrong file" is
+the agent being steered rather than taught, and a store that records every steer
+is a store nobody can find anything in. Firing is a question, not a verdict: the
+agent is told to write nothing if what you said does not outlive the task, and
+to say in one line what it stored when it does.
+
+| Variable | Default | |
+| --- | --- | --- |
+| `SYNAPSSE_CAPTURE` | `1` | `0` turns it off without unregistering it |
+| `SYNAPSSE_STATE_DIR` | `~/.cache/synapsse` | Marks so one message never prompts twice |
+
+Claude Code prints any blocked stop under a fixed `Stop hook error:` label, so
+what appears there is one line saying nothing failed; the instructions travel to
+the agent out of band.
+
 ## Memory model
 
 Each memory is a **node** — a title, a short summary for cheap index reads, a
@@ -244,15 +285,19 @@ normalise before it could answer.
 
 Nodes are organized two ways:
 
-- **Class** — exactly one per node, from a fixed thirteen: entities (`person`,
-  `organization`, `place`, `object`), work (`project`, `plan`, `issue`,
-  `event`), and knowledge (`idea`, `fact`, `decision`, `preference`,
-  `resource`). Closed on purpose — the canvas paints a colour per class, and a
+- **Class** — exactly one per node, from a fixed twenty: entities (`person`,
+  `creature`, `organization`, `place`, `object`, `document`), work (`event`,
+  `project`, `plan`, `issue`, `solution`), and what is held or known
+  (`decision`, `preference`, `constraint`, `interest`, `finding`, `idea`,
+  `trait`, `method`, `skill`). Closed on purpose — the canvas paints a colour per class, and a
   set that grows at runtime is a set where half the graph is the fallback grey.
+  Closed is not frozen: classes have been merged away and added since, each one
+  a migration that moves the memories rather than stranding them.
 - **Tags** — any number per node, created freely and indexed for filtering.
 
 The split is deliberate: a class is the shape, tags are the specifics. A
-girlfriend is a `person` tagged `girlfriend`; a pet is an `object` tagged `pet`.
+girlfriend is a `person` tagged `girlfriend`; a pet is a `creature` tagged
+`pet`.
 A word that is not a class is kept as a tag and the write still succeeds — the
 memory is never lost to a vocabulary argument, and the response says what it
 did.

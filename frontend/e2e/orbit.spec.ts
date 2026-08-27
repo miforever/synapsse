@@ -14,8 +14,20 @@ import { applyOrbit, azimuthRate, polarRate } from "../lib/ambient-orbit";
 
 const TARGET = { x: 10, y: -4, z: 6 };
 
+/** The top of the band the ambient elevation keeps to, as ambient-orbit has it. */
+const MIN_POLAR = 1.02;
+
 function cameraAt(distance: number) {
   return { x: TARGET.x, y: TARGET.y, z: TARGET.z + distance };
+}
+
+/** A viewpoint at `polar` radians off straight up, the way an orbit drag leaves one. */
+function cameraTilted(distance: number, polar: number) {
+  return {
+    x: TARGET.x,
+    y: TARGET.y + distance * Math.cos(polar),
+    z: TARGET.z + distance * Math.sin(polar),
+  };
 }
 
 function radiusFrom(position: { x: number; y: number; z: number }): number {
@@ -56,6 +68,34 @@ test.describe("ambient orbit", () => {
 
     // cos of the clamped polar range, with room for rounding.
     expect(steepest).toBeLessThan(0.55);
+  });
+
+  test("does not yank a steeply orbited view back into range", () => {
+    // Well above the band the ambient motion keeps to, the way an orbit drag
+    // easily leaves it.
+    const steep = cameraTilted(200, 0.4);
+    const before = (steep.y - TARGET.y) / radiusFrom(steep);
+
+    applyOrbit(steep, TARGET, 1, 1 / 60);
+    const after = (steep.y - TARGET.y) / radiusFrom(steep);
+
+    // A frame's worth of drift at most, not a jump to the edge of the band.
+    expect(Math.abs(after - before)).toBeLessThan(0.001);
+    // And still only turning, never moving in or out.
+    expect(radiusFrom(steep)).toBeCloseTo(200, 6);
+  });
+
+  test("eases a steep view back towards the band rather than holding it", () => {
+    const steep = cameraTilted(200, 0.4);
+
+    // Five minutes of frames: the elevation term changes sign as it goes, so
+    // the way home is a drift and not a correction.
+    for (let step = 0; step < 18_000; step += 1) {
+      applyOrbit(steep, TARGET, step / 60, 1 / 60);
+    }
+
+    const elevation = (steep.y - TARGET.y) / radiusFrom(steep);
+    expect(elevation).toBeLessThan(Math.cos(MIN_POLAR) + 1e-6);
   });
 
   test("rotates at a varying rate, not a constant one", () => {
