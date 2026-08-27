@@ -1,6 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
+import type React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { attachFile, detachFile, fetchNode, fileUrl } from "@/lib/api";
@@ -26,6 +27,18 @@ import { MemoryContent } from "./MemoryContent";
 /** Narrower than the drawer and it is an icon, not a cover. */
 const MIN_COVER_PX = 240;
 
+/** Height of the open connection list before anyone drags it. */
+const DEFAULT_LIST_PX = 208;
+
+/** Shorter than this and the list is not worth having open. */
+const MIN_LIST_PX = 96;
+
+/** Room left for the memory above it, however far the list is dragged up. */
+const KEEP_ABOVE_PX = 180;
+
+/** A keyboard's worth of drag. */
+const RESIZE_STEP_PX = 32;
+
 interface Props {
   node: GraphNode | null;
   edges: GraphEdge[];
@@ -47,8 +60,10 @@ export function NodeDrawer({
   const { theme } = useGraphStore();
   const [detail, setDetail] = useState<NodeDetail | null>(null);
   // Sticky across nodes on purpose: someone traversing the graph wants the
-  // connection list to stay however they left it.
+  // connection list to stay however they left it — open, and this tall.
   const [showConnections, setShowConnections] = useState(true);
+  const [listHeight, setListHeight] = useState(DEFAULT_LIST_PX);
+  const [resizing, setResizing] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [dropping, setDropping] = useState(false);
@@ -56,6 +71,44 @@ export function NodeDrawer({
   const [coverTooSmall, setCoverTooSmall] = useState(false);
   /** Which memory is currently on screen, as opposed to being re-read. */
   const shownId = useRef<string | null>(null);
+  /** The drawer itself, which is what the list's height is measured against. */
+  const panel = useRef<HTMLElement>(null);
+  const grabbedAt = useRef({ y: 0, height: 0 });
+
+  // Never past the drawer it lives in, and never so short that opening it
+  // showed nothing.
+  const clampHeight = useCallback((px: number) => {
+    const room = (panel.current?.clientHeight ?? window.innerHeight) - KEEP_ABOVE_PX;
+    return Math.min(Math.max(px, MIN_LIST_PX), Math.max(room, MIN_LIST_PX));
+  }, []);
+
+  const startResize = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      event.currentTarget.setPointerCapture(event.pointerId);
+      grabbedAt.current = { y: event.clientY, height: listHeight };
+      setResizing(true);
+    },
+    [listHeight],
+  );
+
+  const dragResize = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (!resizing) return;
+      const { y, height } = grabbedAt.current;
+      setListHeight(clampHeight(height + (y - event.clientY)));
+    },
+    [resizing, clampHeight],
+  );
+
+  const endResize = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (!resizing) return;
+      event.currentTarget.releasePointerCapture(event.pointerId);
+      setResizing(false);
+    },
+    [resizing],
+  );
 
   /**
    * Attach whatever was dropped.
@@ -214,6 +267,7 @@ export function NodeDrawer({
     <AnimatePresence>
       {node && (
         <motion.aside
+          ref={panel}
           initial={{ x: "100%" }}
           animate={{ x: 0 }}
           exit={{ x: "100%" }}
@@ -364,7 +418,34 @@ export function NodeDrawer({
               whatever the memory's length, and collapses when the reader
               wants the room back. */}
           {related.length > 0 && (
-            <section className="shrink-0 border-t border-line/[.12] bg-elevated/[.05]">
+            <section className="relative shrink-0 border-t border-line/[.12] bg-elevated/[.05]">
+              {showConnections && (
+                <div
+                  role="separator"
+                  aria-orientation="horizontal"
+                  aria-label="Resize connections"
+                  tabIndex={0}
+                  onPointerDown={startResize}
+                  onPointerMove={dragResize}
+                  onPointerUp={endResize}
+                  onPointerCancel={endResize}
+                  onKeyDown={(event) => {
+                    if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+                    event.preventDefault();
+                    const step =
+                      event.key === "ArrowUp" ? RESIZE_STEP_PX : -RESIZE_STEP_PX;
+                    setListHeight((height) => clampHeight(height + step));
+                  }}
+                  className="group absolute inset-x-0 -top-1.5 z-20 flex h-3 cursor-ns-resize items-center justify-center"
+                >
+                  <span
+                    className={`h-0.5 w-10 rounded-full transition group-hover:bg-cyan/60 group-focus-visible:bg-cyan/60 ${
+                      resizing ? "bg-cyan/70" : "bg-line/25"
+                    }`}
+                  />
+                </div>
+              )}
+
               <button
                 type="button"
                 onClick={() => setShowConnections((open) => !open)}
@@ -393,9 +474,10 @@ export function NodeDrawer({
                     animate={{ height: "auto", opacity: 1 }}
                     exit={{ height: 0, opacity: 0 }}
                     transition={{ duration: 0.18 }}
-                    // Capped so a heavily linked memory cannot swallow the
-                    // whole drawer; it scrolls within its own space instead.
-                    className="max-h-52 overflow-y-auto px-3 pb-3"
+                    // A ceiling rather than a height: a short list still takes
+                    // only the room it needs.
+                    style={{ maxHeight: listHeight }}
+                    className="overflow-y-auto px-3 pb-3"
                   >
                     {bands.map(([type, band]) => (
                       <section key={type}>
